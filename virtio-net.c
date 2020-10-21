@@ -455,6 +455,6 @@ int virtionet_write(struct virtio_net *vnet, char *buf, int len)
 void virtionet_handle_interrupt(struct virtio_net *vnet)
 {
 	uint32_t int_status = 0;
-	virtio_get_interrupt_status(vnet->vdev, &int_status);
-	virtio_interrupt_ack(vnet->vdev, int_status);
+	virtio_get_interrupt_status(&vnet->vdev, &int_status);
+	virtio_interrupt_ack(&vnet->vdev, int_status);
 }
