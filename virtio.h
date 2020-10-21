@@ -136,5 +136,6 @@ extern uint64_t virtio_get_config(struct virtio_device *dev, int offset, int siz
 extern int __virtio_read_config(struct virtio_device *dev, void *dst,
 				int offset, int len);
 
-
+extern void virtio_get_interrupt_status(struct virtio_device *dev, uint32_t *status);
+extern void virtio_interrupt_ack(struct virtio_device *dev, uint32_t ack);
 #endif /* _LIBVIRTIO_H */
