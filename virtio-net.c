@@ -32,6 +32,10 @@
 #include "virtio-net.h"
 #include "virtio-internal.h"
 
+#ifdef __CHERI_PURE_CAPABILITY__
+#include <cheri/cheri-utility.h>
+#endif
+
 #undef DEBUG
 //#define DEBUG
 #ifdef DEBUG
@@ -349,6 +353,7 @@ static int virtionet_receive(struct virtio_net *vnet, char *buf, int maxlen)
 	uint16_t avail_idx;
 	struct virtio_device *vdev = &vnet->vdev;
 	struct vqs *vq_rx = &vnet->vdev.vq[VQ_RX];
+	void *dev_buf_addr = NULL;
 
 	idx = virtio_modern16_to_cpu(vdev, vq_rx->used->idx);
 
@@ -381,8 +386,17 @@ static int virtionet_receive(struct virtio_net *vnet, char *buf, int maxlen)
 	printf("\n");
 #endif
 
+	// Get the buffer address from the device
+	dev_buf_addr = (void *) virtio_desc_addr(vdev, VQ_RX, id);
+
+#ifdef __CHERI_PURE_CAPABILITY__
+	// Get/infer the buffer capability from the address received from device
+	dev_buf_addr = cheri_derive_data_cap(vq_rx->buf_mem, (ptraddr_t) dev_buf_addr, len,
+										 __CHERI_CAP_PERMISSION_PERMIT_LOAD__);
+#endif
+
 	/* Copy data to destination buffer */
-	memcpy(buf, virtio_desc_addr(vdev, VQ_RX, id), len);
+	memcpy(buf, dev_buf_addr, len);
 
 	/* Move indices to next entries */
 	last_rx_idx = last_rx_idx + 1;
