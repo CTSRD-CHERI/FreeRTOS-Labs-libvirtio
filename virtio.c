@@ -30,6 +30,10 @@
 #include "virtio_mmio.h"
 #endif
 
+#ifdef __CHERI_PURE_CAPABILITY__
+#include <cheri/cheri-utility.h>
+#endif
+
 /* PCI virtio header offsets */
 #define VIRTIOHDR_DEVICE_FEATURES	0
 #define VIRTIOHDR_GUEST_FEATURES	4
@@ -508,10 +512,28 @@ struct vqs *virtio_queue_init_vq(struct virtio_device *dev, unsigned int id)
 		return NULL;
 	}
 
-	vq->avail = (void *) vq->desc + vq->size * sizeof(struct vring_desc);
-	vq->used = (void *) VQ_ALIGN((unsigned long) vq->avail +
+	vq->avail = (void *) ((size_t) vq->desc + vq->size * sizeof(struct vring_desc));
+
+#ifdef __CHERI_PURE_CAPABILITY__
+	/* Avail ring is  written by the driver */
+	vq->avail = cheri_derive_data_cap(vq->desc,
+									  (ptraddr_t) vq->avail,
+									  sizeof(struct vring_avail) + sizeof(uint16_t) * vq->size,
+									  __CHERI_CAP_PERMISSION_PERMIT_LOAD__ |
+									  __CHERI_CAP_PERMISSION_PERMIT_STORE__);
+#endif
+
+	vq->used = (void *) ((size_t) VQ_ALIGN((size_t) vq->avail +
 		sizeof(struct vring_avail) +
-		sizeof(uint16_t) * vq->size);
+		sizeof(uint16_t) * vq->size));
+
+#ifdef __CHERI_PURE_CAPABILITY__
+	/* Used ring is only written by the device, and read by the driver */
+	vq->used = cheri_derive_data_cap(vq->desc,
+									 (ptraddr_t) vq->used,
+									 sizeof(struct vring_used) + sizeof(struct vring_used_elem) * vq->size,
+									 __CHERI_CAP_PERMISSION_PERMIT_LOAD__);
+#endif
 
 	memset(vq->desc, 0, virtio_vring_size(vq->size));
 	virtio_set_qaddr(dev, id, (unsigned long)vq->desc);
