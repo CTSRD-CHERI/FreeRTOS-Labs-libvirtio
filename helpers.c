@@ -23,23 +23,20 @@
 
 #include <FreeRTOS.h>
 
-void *SLOF_alloc_mem(long size)
+void *SLOF_alloc_mem(size_t size)
 {
 	return pvPortMalloc(size);
 }
 
-void *SLOF_alloc_mem_aligned(long size, long align)
-{
-	unsigned long addr = (unsigned long)SLOF_alloc_mem(size);
+void* SLOF_alloc_mem_aligned(size_t size, size_t alignment) {
+  void* address = NULL;
+  size_t new_size = (size + alignment + sizeof(void*));
 
-	if (addr % align) {
-		SLOF_free_mem((void *)addr, size);
-		addr = (unsigned long)SLOF_alloc_mem(size + align - 1);
-		addr = addr + align - 1;
-		addr = addr & ~(align - 1);
-	}
+  address = pvPortMalloc(new_size);
 
-	return (void *)addr;
+  void **ptr = (void**)((uintptr_t)(address + alignment + sizeof(void*)) & ~(alignment - 1));
+  ptr[-1] = address;
+  return ptr;
 }
 
 void SLOF_free_mem(void *addr, long size)
@@ -52,7 +49,7 @@ long SLOF_dma_map_in(void *virt, long size, int cacheable)
 	// FIXME Empty as only used if IOMMU and VIRTIO_VERSION1 are supported
 	(void) size;
 	(void) cacheable;
-	return virt;
+	return (long) virt;
 }
 
 void SLOF_dma_map_out(long phys, void *virt, long size)
