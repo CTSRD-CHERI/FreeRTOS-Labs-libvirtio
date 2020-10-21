@@ -38,6 +38,14 @@
 #define VRING_DESC_F_WRITE	2	/* buffer is write-only (otherwise read-only) */
 #define VRING_DESC_F_INDIRECT	4	/* buffer contains a list of buffer descriptors */
 
+#ifdef VIRTIO_USE_PCI
+#error "VIRTIO_USE_PCI isn't yet supported by FreeRTOS"
+#endif
+
+#ifndef VIRTIO_USE_MMIO
+#define VIRTIO_USE_MMIO 1
+#endif
+
 /* Descriptor table entry - see Virtio Spec chapter 2.3.2 */
 struct vring_desc {
 	uint64_t addr;		/* Address (guest-physical) */
