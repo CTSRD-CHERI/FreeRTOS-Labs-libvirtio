@@ -120,7 +120,7 @@ extern void virtio_fill_desc(struct vqs *vq, int id, uint64_t features,
                              uint64_t addr, uint32_t len,
                              uint16_t flags, uint16_t next);
 extern void virtio_free_desc(struct vqs *vq, int id, uint64_t features);
-void *virtio_desc_addr(struct virtio_device *vdev, int queue, int id);
+size_t virtio_desc_addr(struct virtio_device *vdev, int queue, int id);
 extern struct vqs *virtio_queue_init_vq(struct virtio_device *dev, unsigned int id);
 extern void virtio_queue_term_vq(struct virtio_device *dev, struct vqs *vq, unsigned int id);
 

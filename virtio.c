@@ -165,7 +165,7 @@ static void virtio_process_cap(struct virtio_device *dev, uint8_t cap_ptr)
 #endif
 
 #ifdef VIRTIO_USE_MMIO
-void virtio_mmio_print_configs(uint32_t* device_base)
+static void virtio_mmio_print_configs(uint32_t* device_base)
 {
 	printf("MagicValue:\t 0x%x\n", virtio_mmio_read32(device_base, VIRTIO_MMIO_MAGIC_VALUE));
 	printf("Version:\t 0x%x\n", virtio_mmio_read32(device_base, VIRTIO_MMIO_VERSION));
@@ -396,14 +396,14 @@ void virtio_free_desc(struct vqs *vq, int id, uint64_t features)
 	vq->desc_gpas[id] = NULL;
 }
 
-void *virtio_desc_addr(struct virtio_device *vdev, int queue, int id)
+size_t virtio_desc_addr(struct virtio_device *vdev, int queue, int id)
 {
 	struct vqs *vq = &vdev->vq[queue];
 
 	if (vq->desc_gpas)
-		return vq->desc_gpas[id];
+		return (size_t) vq->desc_gpas[id];
 
-	return (void *) virtio_modern64_to_cpu(vdev, vq->desc[id].addr);
+	return (size_t) virtio_modern64_to_cpu(vdev, vq->desc[id].addr);
 }
 
 /**
@@ -550,7 +550,7 @@ struct vqs *virtio_queue_init_vq(struct virtio_device *dev, unsigned int id)
 void virtio_queue_term_vq(struct virtio_device *dev, struct vqs *vq, unsigned int id)
 {
 	if (vq->desc_gpas) {
-		int i;
+		uint32_t i;
 
 		for (i = 0; i < vq->size; ++i)
 			virtio_free_desc(vq, i, dev->features);
@@ -616,7 +616,7 @@ void virtio_get_status(struct virtio_device *dev, int *status)
 /**
  * Get device interrupt status bits
  */
-void virtio_get_interrupt_status(struct virtio_device *dev, int *status)
+void virtio_get_interrupt_status(struct virtio_device *dev, uint32_t *status)
 {
 #if VIRTIO_USE_MMIO
 	*status = virtio_mmio_read32(dev->mmio_base, VIRTIO_MMIO_INTERRUPT_STATUS);
@@ -626,7 +626,7 @@ void virtio_get_interrupt_status(struct virtio_device *dev, int *status)
 /**
  * Ack device interrupt
  */
-void virtio_interrupt_ack(struct virtio_device *dev, int ack)
+void virtio_interrupt_ack(struct virtio_device *dev, uint32_t ack)
 {
 #if VIRTIO_USE_MMIO
 	virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_INTERRUPT_ACK, ack);
@@ -696,6 +696,8 @@ uint64_t virtio_get_host_features(struct virtio_device *dev)
 		features = le32_to_cpu(ci_read_32(dev->legacy.addr+VIRTIOHDR_DEVICE_FEATURES));
 	}
 	return features;
+#elif VIRTIO_USE_MMIO
+    return 0;
 #endif
 }
 
@@ -733,6 +735,8 @@ int virtio_negotiate_guest_features(struct virtio_device *dev, uint64_t features
 
 	dev->features = features;
 
+	return 0;
+#elif VIRTIO_USE_MMIO
 	return 0;
 #endif
 }
@@ -827,5 +831,7 @@ int __virtio_read_config(struct virtio_device *dev, void *dst,
 		buf[i] = ci_read_8(confbase + offset + i);
 
 	return len;
+#elif VIRTIO_USE_MMIO
+    return 0;
 #endif
 }
