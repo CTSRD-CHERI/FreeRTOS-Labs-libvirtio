@@ -235,6 +235,7 @@ struct virtio_device *virtio_setup_vd(void *device_base)
 	return dev;
 #elif VIRTIO_USE_MMIO
 	struct virtio_device *dev;
+	volatile uint64_t features = 0;
 
 	dev = SLOF_alloc_mem(sizeof(struct virtio_device));
 	if (!dev) {
@@ -242,15 +243,19 @@ struct virtio_device *virtio_setup_vd(void *device_base)
 		return NULL;
 	}
 
-	if (virtio_mmio_read32(device_base, VIRTIO_MMIO_VERSION) & VIRTIO_F_VERSION_1) {
+	// Read the full 64-bit device features field
+	virtio_mmio_write32(device_base, VIRTIO_MMIO_HOST_FEATURES_SEL, 0);
+	features = virtio_mmio_read32(device_base, VIRTIO_MMIO_HOST_FEATURES);
+		virtio_mmio_write32(device_base, VIRTIO_MMIO_HOST_FEATURES_SEL, 1);
+	features |= ((uint64_t) virtio_mmio_read32(device_base, VIRTIO_MMIO_HOST_FEATURES) << 32);
+	if (features & VIRTIO_F_VERSION_1) {
 		dev->features = VIRTIO_F_VERSION_1;
 		dev->mmio_base = device_base;
 	} else {
 		dev->features = 0;
 		dev->mmio_base = device_base;
+		virtio_mmio_write32(device_base, VIRTIO_MMIO_GUEST_PAGE_SIZE, 0x1000);
 	}
-
-	virtio_mmio_write32(device_base, VIRTIO_MMIO_GUEST_PAGE_SIZE, 0x1000);
 	sync();
 
 	return dev;
