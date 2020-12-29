@@ -290,8 +290,8 @@ static int virtionet_term(struct virtio_net *vnet)
 static int virtionet_xmit(struct virtio_net *vnet, char *buf, int len)
 {
 	int id, idx;
-	static struct virtio_net_hdr_v1 nethdr_v1;
-	static struct virtio_net_hdr nethdr_legacy;
+	const static struct virtio_net_hdr_v1 nethdr_v1 = {0};
+	const static struct virtio_net_hdr nethdr_legacy = {0};
 	void *nethdr = &nethdr_legacy;
 	struct virtio_device *vdev = &vnet->vdev;
 	struct vqs *vq_tx = &vdev->vq[VQ_TX];
@@ -305,8 +305,6 @@ static int virtionet_xmit(struct virtio_net *vnet, char *buf, int len)
 
 	if (vdev->features & VIRTIO_F_VERSION_1)
 		nethdr = &nethdr_v1;
-
-	memset(nethdr, 0, net_hdr_size);
 
 	/* Determine descriptor index */
 	idx = virtio_modern16_to_cpu(vdev, vq_tx->avail->idx);
