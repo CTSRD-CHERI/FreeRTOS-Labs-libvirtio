@@ -747,7 +747,15 @@ uint64_t virtio_get_host_features(struct virtio_device *dev)
 	}
 	return features;
 #elif VIRTIO_USE_MMIO
-    return 0;
+	// Read the full 64-bit device features field
+	uint64_t features = 0;
+	virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_HOST_FEATURES_SEL, 0);
+	sync();
+	features = virtio_mmio_read32(dev->mmio_base, VIRTIO_MMIO_HOST_FEATURES);
+	virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_HOST_FEATURES_SEL, 1);
+	sync();
+	features |= ((uint64_t) virtio_mmio_read32(dev->mmio_base, VIRTIO_MMIO_HOST_FEATURES) << 32);
+	return features;
 #endif
 }
 
