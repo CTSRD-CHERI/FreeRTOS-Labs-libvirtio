@@ -301,7 +301,7 @@ static int virtionet_xmit(struct virtio_net *vnet, char *buf, int len)
 		return 0;
 	}
 
-	dprintf("\nvirtionet_xmit(packet at %p, %d bytes)\n", buf, len);
+	dprintf("\nvirtionet_xmit(packet at %p, %d bytes)\n", vq_tx->buf_mem, len);
 
 	if (vdev->features & VIRTIO_F_VERSION_1)
 		nethdr = &nethdr_v1;
@@ -309,6 +309,10 @@ static int virtionet_xmit(struct virtio_net *vnet, char *buf, int len)
 	/* Determine descriptor index */
 	idx = virtio_modern16_to_cpu(vdev, vq_tx->avail->idx);
 	id = (idx * 2) % vq_tx->size;
+	uint32_t buf_index = (idx * 2) % (vq_tx->size / 2);
+
+	uint8_t *buf_addr = vq_tx->buf_mem + ((buf_index / 2) * (BUFFER_ENTRY_SIZE));
+	memcpy(buf_addr, buf, len);
 
 	virtio_free_desc(vq_tx, id, vdev->features);
 	virtio_free_desc(vq_tx, id + 1, vdev->features);
@@ -318,7 +322,7 @@ static int virtionet_xmit(struct virtio_net *vnet, char *buf, int len)
 			 net_hdr_size, VRING_DESC_F_NEXT, id + 1);
 
 	/* Set up virtqueue descriptor for data */
-	virtio_fill_desc(vq_tx, id + 1, vdev->features, (uint64_t)buf, len, 0, 0);
+	virtio_fill_desc(vq_tx, id + 1, vdev->features, ((uint64_t) buf_addr),  len, 0, 0);
 
 	vq_tx->avail->ring[idx % vq_tx->size] = virtio_cpu_to_modern16(vdev, id);
 	sync();
