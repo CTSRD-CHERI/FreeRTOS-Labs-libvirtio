@@ -309,12 +309,18 @@ unsigned int virtio_get_qsize(struct virtio_device *dev, int queue)
 
 	return size;
 #elif VIRTIO_USE_MMIO
+
 	virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_SEL, queue);
-	// FIXME: This is always reading 0 even if it's written with a different
-	// value. Use VIRTIO_MMIO_QUEUE_NUM_MAX instead.
-	//return virtio_mmio_read32(VIRTIO_MMIO_QUEUE_NUM);
 	sync();
-	return virtio_mmio_read32(dev->mmio_base, VIRTIO_MMIO_QUEUE_NUM_MAX);
+
+	if (dev->features & VIRTIO_F_VERSION_1) {
+		return virtio_mmio_read32(dev->mmio_base, VIRTIO_MMIO_QUEUE_NUM);
+	} else {
+		// FIXME: This is always reading 0 even if it's written with a different
+		// value (only on QEMU/Legacy virtio). Use VIRTIO_MMIO_QUEUE_NUM_MAX instead.
+		//return virtio_mmio_read31(VIRTIO_MMIO_QUEUE_NUM);
+		return virtio_mmio_read32(dev->mmio_base, VIRTIO_MMIO_QUEUE_NUM_MAX);
+	}
 #endif
 }
 
