@@ -473,7 +473,7 @@ void virtio_queue_notify(struct virtio_device *dev, int queue)
 /**
  * Set queue address
  */
-static void virtio_set_qaddr(struct virtio_device *dev, int queue, unsigned long qaddr)
+static void virtio_set_qaddr(struct virtio_device *dev, int queue, uint64_t qaddr)
 {
 #ifdef VIRTIO_USE_PCI
 	if (dev->features & VIRTIO_F_VERSION_1) {
@@ -566,7 +566,7 @@ struct vqs *virtio_queue_init_vq(struct virtio_device *dev, unsigned int id)
 #endif
 
 	memset(vq->desc, 0, virtio_vring_size(vq->size));
-	virtio_set_qaddr(dev, id, (unsigned long)vq->desc);
+	virtio_set_qaddr(dev, id, (uint64_t)vq->desc);
 
 	vq->avail->flags = virtio_cpu_to_modern16(dev, VRING_AVAIL_F_NO_INTERRUPT);
 	vq->avail->idx = 0;
