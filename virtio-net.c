@@ -138,6 +138,7 @@ static int virtionet_init(struct virtio_net *vnet)
 	struct virtio_device *vdev = &vnet->vdev;
 	net_driver_t *driver = &vnet->driver;
 	struct vqs *vq_tx, *vq_rx;
+	uint16_t queue_size = 0;
 
 	dprintf("virtionet_init(%02x:%02x:%02x:%02x:%02x:%02x)\n",
 		driver->mac_addr[0], driver->mac_addr[1],
@@ -174,16 +175,21 @@ static int virtionet_init(struct virtio_net *vnet)
 		return -1;
 	}
 
-	/* Allocate memory for one transmit an multiple receive buffers */
-	vq_rx->buf_mem = SLOF_alloc_mem((BUFFER_ENTRY_SIZE+net_hdr_size)
-				   * RX_QUEUE_SIZE);
+	queue_size = virtio_get_qsize(vdev, VQ_RX);
+
+	/* Allocate memory for half of queue_size  for the receive buffers.
+	 * Every 2 subsequent entry descriptors in the vqueue is a net-header + eth buff
+	 * and those form a single buffer.
+	*/
+	vq_rx->buf_mem = SLOF_alloc_mem_aligned((BUFFER_ENTRY_SIZE+net_hdr_size)
+				   * queue_size / 2 , 8);
 	if (!vq_rx->buf_mem) {
-		printf("virtionet: Failed to allocate buffers!\n");
+		printf("virtionet: Failed to allocate rx buffers!\n");
 		goto dev_error;
 	}
 
 	/* Prepare receive buffer queue */
-	for (i = 0; i < RX_QUEUE_SIZE; i++) {
+	for (i = 0; i < queue_size / 2; i++) {
 		uint64_t addr = (uint64_t)vq_rx->buf_mem
 			+ i * (BUFFER_ENTRY_SIZE+net_hdr_size);
 		uint32_t id = i*2;
