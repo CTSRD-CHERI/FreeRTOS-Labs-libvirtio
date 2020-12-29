@@ -761,7 +761,6 @@ uint64_t virtio_get_host_features(struct virtio_device *dev)
 
 int virtio_negotiate_guest_features(struct virtio_device *dev, uint64_t features)
 {
-#ifdef VIRTIO_USE_PCI
 	uint64_t host_features = 0;
 	int status;
 
@@ -794,9 +793,6 @@ int virtio_negotiate_guest_features(struct virtio_device *dev, uint64_t features
 	dev->features = features;
 
 	return 0;
-#elif VIRTIO_USE_MMIO
-	return 0;
-#endif
 }
 
 /**
