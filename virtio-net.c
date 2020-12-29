@@ -188,6 +188,14 @@ static int virtionet_init(struct virtio_net *vnet)
 		goto dev_error;
 	}
 
+	/* Allocate memory for half of queue_size for the transmit buffers. */
+	vq_tx->buf_mem = SLOF_alloc_mem_aligned((BUFFER_ENTRY_SIZE)
+				    * queue_size / 2, 8);
+	if (!vq_tx->buf_mem) {
+		printf("virtionet: Failed to allocate tx buffers!\n");
+		goto dev_error;
+	}
+
 	/* Prepare receive buffer queue */
 	for (i = 0; i < queue_size / 2; i++) {
 		uint64_t addr = (uint64_t)vq_rx->buf_mem
