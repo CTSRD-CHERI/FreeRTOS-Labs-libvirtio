@@ -335,9 +335,6 @@ static int virtionet_xmit(struct virtio_net *vnet, char *buf, int len)
 
 	virtio_queue_notify(vdev, VQ_TX);
 
-	// Wait until the device has sent the packet
-	while (vq_tx->used->idx == last_tx_idx);
-
 	return len;
 }
 
