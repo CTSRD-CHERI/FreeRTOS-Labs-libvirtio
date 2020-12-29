@@ -213,8 +213,8 @@ static int virtionet_init(struct virtio_net *vnet)
 	}
 	sync();
 
-	vq_rx->avail->flags = virtio_cpu_to_modern16(vdev, VRING_AVAIL_F_NO_INTERRUPT);
-	vq_rx->avail->idx = virtio_cpu_to_modern16(vdev, RX_QUEUE_SIZE);
+	vq_rx->avail->flags = virtio_cpu_to_modern16(vdev, 0);
+	vq_rx->avail->idx = virtio_cpu_to_modern16(vdev, queue_size / 2);
 
 	last_rx_idx = virtio_modern16_to_cpu(vdev, vq_rx->used->idx);
 
