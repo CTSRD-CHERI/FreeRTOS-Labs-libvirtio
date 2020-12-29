@@ -226,6 +226,7 @@ static int virtionet_init(struct virtio_net *vnet)
 	virtio_set_status(vdev, status);
 
 	/* Tell HV that RX queues are ready */
+	virtio_queue_ready(vdev, VQ_RX);
 	virtio_queue_notify(vdev, VQ_RX);
 
 	driver->running = 1;
