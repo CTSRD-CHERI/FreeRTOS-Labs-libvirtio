@@ -116,6 +116,11 @@ struct virtio_device {
 };
 #endif
 
+typedef struct {
+	uint8_t* pucEthernetBuffer;
+	size_t xDataLength;
+} DMADescriptor_t;
+
 /* Parts of the virtqueue are aligned on a 4096 byte page boundary */
 #define VQ_ALIGN(addr)	(((addr) + 0xfff) & ~0xfff)
 
