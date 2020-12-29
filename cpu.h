@@ -25,7 +25,7 @@ static inline void barrier(void)
 
 static inline void sync(void)
 {
-  // TODO
+  asm volatile("fence iorw,iorw" :::"memory");
 }
 #define mb() sync()
 
