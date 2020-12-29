@@ -516,10 +516,30 @@ static void virtio_set_qaddr(struct virtio_device *dev, int queue, uint64_t qadd
 	virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_SEL, queue);
 	sync();
 
-	// Only legacy virtio is currently supported
-	virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_PFN, qaddr >> 12);
-	virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_NUM, 1024);
-	virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_ALIGN, 0x1000);
+	if (dev->features & VIRTIO_F_VERSION_1) {
+		uint64_t q_desc = qaddr;
+		uint64_t q_avail;
+		uint64_t q_used;
+		uint32_t q_size = virtio_get_qsize(dev, queue);
+
+		q_avail = q_desc + q_size * sizeof(struct vring_desc);
+		q_used = VQ_ALIGN(q_avail + sizeof(struct vring_avail) + sizeof(uint16_t) * q_size);
+
+		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_DESC_LOW, (qaddr & UINT32_MAX));
+		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_DESC_HIGH, (((uint64_t) qaddr >> 32) & UINT32_MAX));
+
+		// Avail
+		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_AVAIL_LOW, (q_avail & UINT32_MAX));
+		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_AVAIL_HIGH, (((uint64_t) q_avail >> 32) & UINT32_MAX));
+
+		// Used
+		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_USED_LOW, (q_used & UINT32_MAX));
+		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_USED_HIGH, (((uint64_t) q_used >> 32) & UINT32_MAX));
+	} else {
+		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_PFN, qaddr >> 12);
+		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_NUM, 1024);
+		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_ALIGN, 0x1000);
+	}
 #endif
 }
 
