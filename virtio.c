@@ -434,6 +434,17 @@ void virtio_reset_device(struct virtio_device *dev)
 }
 
 
+void virtio_queue_ready(struct virtio_device *dev, int queue)
+{
+#if VIRTIO_USE_MMIO
+	if (dev->features & VIRTIO_F_VERSION_1) {
+		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_SEL, queue);
+		sync();
+		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_READY, 1);
+	}
+#endif
+
+}
 /**
  * Notify hypervisor about queue update
  */
