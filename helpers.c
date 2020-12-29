@@ -32,6 +32,9 @@ void* SLOF_alloc_mem_aligned(size_t size, size_t alignment) {
   void* address = NULL;
   size_t new_size = (size + alignment + sizeof(void*));
 
+  if (alignment < portBYTE_ALIGNMENT)
+    alignment = portBYTE_ALIGNMENT;
+
   address = pvPortMalloc(new_size);
 
   void **ptr = (void**)((uintptr_t)(address + alignment + sizeof(void*)) & ~(alignment - 1));
