@@ -23,6 +23,8 @@
 
 #include <FreeRTOS.h>
 
+#define pdUS_TO_TICKS( xTimeInUs ) ( ( TickType_t ) ( ( ( TickType_t ) ( xTimeInUs ) * ( TickType_t ) configTICK_RATE_HZ ) / ( TickType_t ) 1000000 ) )
+
 void *SLOF_alloc_mem(size_t size)
 {
 	return pvPortMalloc(size);
@@ -61,4 +63,28 @@ void SLOF_dma_map_out(long phys, void *virt, long size)
 	(void) size;
 	(void) phys;
 	(void) virt;
+}
+
+/**
+ * get msec-timer value
+ * access to HW register
+ * overrun will occur if boot exceeds 1.193 hours (49 days)
+ *
+ * @param   -
+ * @return  actual timer value in ms as 32bit
+ */
+uint32_t SLOF_GetTimer(void)
+{
+    uint64_t us = portGET_RUN_TIME_COUNTER_VALUE();
+    return (uint32_t) (us / 1000);
+}
+
+void SLOF_msleep(uint32_t time)
+{
+  vTaskDelay( pdMS_TO_TICKS ( time ) );
+}
+
+void SLOF_usleep(uint32_t time)
+{
+  vTaskDelay( pdUS_TO_TICKS ( time ) );
 }
