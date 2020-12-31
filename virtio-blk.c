@@ -20,7 +20,8 @@
 #include "virtio-internal.h"
 
 #define DEFAULT_SECTOR_SIZE 512
-#define DRIVER_FEATURE_SUPPORT  (VIRTIO_BLK_F_BLK_SIZE | VIRTIO_F_VERSION_1)
+//#define DRIVER_FEATURE_SUPPORT  (VIRTIO_BLK_F_BLK_SIZE | VIRTIO_F_VERSION_1)
+#define DRIVER_FEATURE_SUPPORT  (VIRTIO_F_VERSION_1)
 
 /**
  * Initialize virtio-block device.
