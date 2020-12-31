@@ -54,9 +54,9 @@ struct virtio_blk_cfg {
 
 /* Block request */
 struct virtio_blk_req {
-	uint32_t  type ;
-	uint32_t  ioprio ;
-	uint64_t  sector ;
+	uint32_t  type;
+	uint32_t  reserved;
+	uint64_t  sector;
 };
 
 /* Block request types */

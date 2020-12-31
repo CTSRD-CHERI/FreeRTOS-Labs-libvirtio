@@ -98,11 +98,11 @@ static void fill_blk_hdr(struct virtio_blk_req *blkhdr, bool is_modern,
 {
 	if (is_modern) {
 		blkhdr->type = cpu_to_le32(type);
-		blkhdr->ioprio = cpu_to_le32(ioprio);
+		//blkhdr->ioprio = cpu_to_le32(ioprio);
 		blkhdr->sector = cpu_to_le64(sector);
 	} else {
 		blkhdr->type = type;
-		blkhdr->ioprio = ioprio;
+		//blkhdr->ioprio = ioprio;
 		blkhdr->sector = sector;
 	}
 }
