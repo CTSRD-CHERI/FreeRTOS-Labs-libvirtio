@@ -50,6 +50,11 @@ void SLOF_free_mem(void *addr, long size)
 	vPortFree(addr);
 }
 
+void SLOF_free_mem_aligned(void *addr)
+{
+    vPortFree(((void**) addr)[-1]);
+}
+
 long SLOF_dma_map_in(void *virt, long size, int cacheable)
 {
 	// FIXME Empty as only used if IOMMU and VIRTIO_VERSION1 are supported

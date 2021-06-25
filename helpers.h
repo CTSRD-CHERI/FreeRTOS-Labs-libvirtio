@@ -26,6 +26,7 @@ extern void SLOF_dma_free(void *virt, long size);
 extern void *SLOF_alloc_mem(size_t size);
 extern void *SLOF_alloc_mem_aligned(size_t size, size_t align);
 extern void SLOF_free_mem(void *addr, long size);
+extern void SLOF_free_mem_aligned(void *addr);
 extern long SLOF_dma_map_in(void *virt, long size, int cacheable);
 extern void SLOF_dma_map_out(long phys, void *virt, long size);
 extern long SLOF_pci_config_read32(long offset);

@@ -605,8 +605,7 @@ void virtio_queue_term_vq(struct virtio_device *dev, struct vqs *vq, unsigned in
 		for (i = 0; i < vq->size; ++i)
 			virtio_free_desc(vq, i, dev->features);
 
-		SLOF_free_mem(vq->desc_gpas,
-			vq->size * sizeof(vq->desc_gpas[0]));
+		SLOF_free_mem_aligned(vq->desc_gpas);
 	}
 	if (vq->desc) {
 		if (dev->features & VIRTIO_F_IOMMU_PLATFORM) {
@@ -624,7 +623,7 @@ void virtio_queue_term_vq(struct virtio_device *dev, struct vqs *vq, unsigned in
 			SLOF_dma_map_out(vq->bus_desc, 0, cb);
 		}
 
-		SLOF_free_mem(vq->desc, virtio_vring_size(vq->size));
+		SLOF_free_mem_aligned(vq->desc);
 	}
 	memset(vq, 0, sizeof(*vq));
 }

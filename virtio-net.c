@@ -273,9 +273,9 @@ static int virtionet_term(struct virtio_net *vnet)
 
 	driver->running = 0;
 
-	SLOF_free_mem(vq_rx->buf_mem,
-		      (BUFFER_ENTRY_SIZE+net_hdr_size) * RX_QUEUE_SIZE);
+	SLOF_free_mem_aligned(vq_rx->buf_mem);
 	vq_rx->buf_mem = NULL;
+	vq_tx->buf_mem = NULL;
 
 	virtio_queue_term_vq(vdev, vq_rx, VQ_RX);
 	virtio_queue_term_vq(vdev, vq_tx, VQ_TX);
