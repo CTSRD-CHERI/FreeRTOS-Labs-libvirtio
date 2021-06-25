@@ -28,8 +28,8 @@
 /* VIRTIO 1.0 Device independent feature bits */
 #define VIRTIO_F_RING_INDIRECT_DESC	BIT(28)
 #define VIRTIO_F_RING_EVENT_IDX		BIT(29)
-#define VIRTIO_F_VERSION_1		BIT(32)
-#define VIRTIO_F_IOMMU_PLATFORM         BIT(33)
+#define VIRTIO_F_VERSION_1		((uint64_t) BIT(32))
+#define VIRTIO_F_IOMMU_PLATFORM        ((uint64_t) BIT(33))
 
 #define VIRTIO_TIMEOUT		        5000 /* 5 sec timeout */
 
