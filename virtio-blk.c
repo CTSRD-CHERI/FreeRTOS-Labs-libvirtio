@@ -158,7 +158,7 @@ virtioblk_transfer(struct virtio_device *dev, char *buf, uint64_t blocknum,
 	current_used_idx = &vq->used->idx;
 
 	/* Set up header */
-	fill_blk_hdr(&blkhdr, dev->features, type | VIRTIO_BLK_T_BARRIER,
+	fill_blk_hdr(&blkhdr, dev->features, type,
 		     1, blocknum * blk_size / DEFAULT_SECTOR_SIZE);
 
 	/* Determine descriptor index */
