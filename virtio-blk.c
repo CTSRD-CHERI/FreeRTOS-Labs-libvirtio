@@ -144,12 +144,19 @@ virtioblk_transfer(struct virtio_device *dev, char *buf, uint64_t blocknum,
 		return 0;
 	}
 
-	blk_size = virtio_get_config(dev,
-			offset_of(struct virtio_blk_cfg, blk_size),
-			sizeof(blk_size));
-	if (blk_size % DEFAULT_SECTOR_SIZE) {
-		fprintf(stderr, "virtio-blk: Unaligned sector size %d\n", blk_size);
-		return 0;
+	/* If we negotiated the "ideal block size" feature, use that to determine the block size */
+	if (dev->features & VIRTIO_BLK_F_BLK_SIZE) {
+		blk_size = virtio_get_config(dev,
+				offset_of(struct virtio_blk_cfg, blk_size),
+				sizeof(blk_size));
+		if (blk_size % DEFAULT_SECTOR_SIZE) {
+			fprintf(stderr, "virtio-blk: Unaligned sector size %d\n", blk_size);
+			return 0;
+		}
+		if (blk_size == 0) {
+			fprintf(stderr, "virtio-blk: blk_size in device config space = 0\n");
+			return 0;
+		}
 	}
 
 	avail_idx = virtio_modern16_to_cpu(dev, vq->avail->idx);
