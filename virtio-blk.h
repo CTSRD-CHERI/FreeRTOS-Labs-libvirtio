@@ -62,11 +62,6 @@ struct virtio_blk_req {
 /* Block request types */
 #define VIRTIO_BLK_T_IN			0
 #define VIRTIO_BLK_T_OUT		1
-#define VIRTIO_BLK_T_SCSI_CMD		2
-#define VIRTIO_BLK_T_SCSI_CMD_OUT	3
-#define VIRTIO_BLK_T_FLUSH		4
-#define VIRTIO_BLK_T_FLUSH_OUT		5
-#define VIRTIO_BLK_T_BARRIER		0x80000000
 
 /* VIRTIO_BLK Feature bits */
 #define VIRTIO_BLK_F_BLK_SIZE       (1 << 6)
