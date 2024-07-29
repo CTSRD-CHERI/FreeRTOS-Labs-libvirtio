@@ -132,8 +132,10 @@ virtioblk_transfer(struct virtio_device *dev, char *buf, uint64_t blocknum,
 	uint16_t last_used_idx, avail_idx;
 	int blk_size = DEFAULT_SECTOR_SIZE;
 
-	//printf("virtioblk_transfer: dev=%p buf=%p blocknum=%lli cnt=%li type=%i\n",
-	//	dev, buf, blocknum, cnt, type);
+	virtio_debug_keymngr();
+
+	printf("virtioblk_transfer: dev=%p buf=%p blocknum=%lli cnt=%li type=%i\n",
+		dev, buf, blocknum, cnt, type);
 
 	/* Check whether request is within disk capacity */
 	capacity = virtio_get_config(dev,
@@ -207,6 +209,8 @@ virtioblk_transfer(struct virtio_device *dev, char *buf, uint64_t blocknum,
 	virtio_free_desc(vq, id + 1, dev->features);
 	virtio_free_desc(vq, id + 2, dev->features);
 
+	virtio_debug_keymngr();
+	
 	if (status == 0)
 		return cnt;
 

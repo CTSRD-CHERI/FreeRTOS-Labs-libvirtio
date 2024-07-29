@@ -15,6 +15,8 @@
  *     IBM Corporation - initial implementation
  *****************************************************************************/
 
+#include "FreeRTOSConfig.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,6 +27,10 @@
 #include "virtio.h"
 #include "helpers.h"
 #include "virtio-internal.h"
+
+#ifdef VIRTIO_USE_IOCAPS
+#include "iocap/librust_caps_c.h"
+#endif
 
 #ifdef VIRTIO_USE_MMIO
 #include "virtio_mmio.h"
@@ -524,6 +530,7 @@ static void virtio_set_qaddr(struct virtio_device *dev, int queue, uint64_t qadd
 
 		q_avail = q_desc + q_size * sizeof(struct vring_desc);
 		q_used = VQ_ALIGN(q_avail + sizeof(struct vring_avail) + sizeof(uint16_t) * q_size);
+		uint64_t end_of_q_used = q_used + sizeof(struct vring_used) + sizeof(struct vring_used_elem) * q_size;
 
 		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_DESC_LOW, (qaddr & UINT32_MAX));
 		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_DESC_HIGH, (((uint64_t) qaddr >> 32) & UINT32_MAX));
@@ -535,6 +542,35 @@ static void virtio_set_qaddr(struct virtio_device *dev, int queue, uint64_t qadd
 		// Used
 		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_USED_LOW, (q_used & UINT32_MAX));
 		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_USED_HIGH, (((uint64_t) q_used >> 32) & UINT32_MAX));
+
+		#ifdef VIRTIO_USE_IOCAPS
+		// Generate and send an I/O capability.
+		// First, generate a key.
+		CCapU128 key = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
+
+		// Upload the key to the key manager, which expects 64-bit accesses
+		uint32_t secret_key_id = 0;
+		virtio_mmio_write128_group64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1000 + (secret_key_id << 4), key);
+		printf("virtio-iocap: wrote key to manager\n");
+		virtio_mmio_write64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, secret_key_id << 4, 1);
+		// Wait for the key manager to accept the key (usually instant)
+		// Use 64-bit read here because the key manager can't handle anything else :grimace:
+		while (virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, secret_key_id << 4) != 1) {}
+		printf("virtio-iocap: uploaded key to manager (status = 1)\n");
+
+		// Generate the iocap
+		CCap2024_02 queue_iocap;
+		uint64_t q_byte_len = end_of_q_used - q_desc;
+		if (ccap_init_inexact(&queue_iocap, key, q_desc, q_byte_len, secret_key_id, CCapPerms_ReadWrite) != CCapResult_Success) {
+			printf("virtio-iocap: Failed to initialize queue_iocap!\n");
+		}
+		// Write out the IOcap to the device, which expects 32-bit accesses
+		virtio_mmio_write128_group32(dev->mmio_base, VIRTIO_MMIO_QUEUE_IOCAP_TXT_WORD0, queue_iocap.data);
+		virtio_mmio_write128_group32(dev->mmio_base, VIRTIO_MMIO_QUEUE_IOCAP_SIG_WORD0, queue_iocap.signature);
+		printf("virtio-iocap: Wrote queue_iocap text and signature to device\n");
+
+		virtio_debug_keymngr();
+		#endif
 	} else {
 		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_PFN, qaddr >> 12);
 		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_NUM, 1024);
@@ -887,4 +923,16 @@ int __virtio_read_config(struct virtio_device *dev, void *dst,
 #elif VIRTIO_USE_MMIO
     return 0;
 #endif
+}
+
+void virtio_debug_keymngr(void) {
+	#ifdef VIRTIO_USE_IOCAPS
+	// Read the iocap stats out
+	uint64_t gw = virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1000);
+	uint64_t bw = virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1008);
+	uint64_t gr = virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1010);
+	uint64_t br = virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1018);
+
+	printf("virtio-iocap: stats gw %3d bw %3d gr %3d br %3d\n", gw, bw, gr, br);
+	#endif
 }
