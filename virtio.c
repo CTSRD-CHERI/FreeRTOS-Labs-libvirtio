@@ -30,6 +30,11 @@
 
 #ifdef VIRTIO_USE_IOCAPS
 #include "iocap/librust_caps_c.h"
+
+const static CCapU128 global_queue_key = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
+const static uint32_t global_queue_key_id = 0;
+const static CCapU128 global_dma_key = {0xDE, 0xAD, 0xBE, 0xEF};
+const static uint32_t global_dma_key_id = 1;
 #endif
 
 #ifdef VIRTIO_USE_MMIO
@@ -379,6 +384,31 @@ void virtio_fill_desc(struct vqs *vq, int id, uint64_t features,
 	desc = &vq->desc[id];
 	next %= vq->size;
 
+	#ifdef VIRTIO_USE_IOCAPS
+    // Pack the `flag` bits and `next` into secret_key_id. 
+    // This is 23-bits long, but the current setup only uses 255 keys i.e. 8 bits.
+    // Thus, we can take up 15 bits. 2 for the next|indirect flags, 13 for the 'next' field.
+    // |- flags[1:0] -|- next[12:0] -|- key[7:0] -|
+    //     [22:21]         [20:8]         [7:0]
+
+	uint32_t secret_key_id = (global_dma_key_id & 0xFF) | ((uint32_t)(next & 0x1FFF) << 8);
+	if (flags & VRING_DESC_F_NEXT) {
+		secret_key_id |= 1 << 21;
+	}
+	if (flags & VRING_DESC_F_INDIRECT) {
+		secret_key_id |= 1 << 22;
+	}
+
+	// virtio is Read XOR Write
+	CCapPerms perms = CCapPerms_Read;
+	if (flags & VRING_DESC_F_WRITE) {
+		perms = CCapPerms_Write;
+	}
+
+	if (ccap_init_cavs_exact(&desc->cap, global_dma_key, addr, len, secret_key_id, perms) != CCapResult_Success) {
+		printf("Oh no! ccap_init_cavs_exact of base 0x%016lx len: 0x%016x failed :(\n", addr, len);
+	}
+	#else
 	if (features & VIRTIO_F_VERSION_1) {
 		if (features & VIRTIO_F_IOMMU_PLATFORM) {
 			void *gpa = (void *) addr;
@@ -401,6 +431,7 @@ void virtio_fill_desc(struct vqs *vq, int id, uint64_t features,
 		desc->flags = flags;
 		desc->next = next;
 	}
+	#endif
 }
 
 void virtio_free_desc(struct vqs *vq, int id, uint64_t features)
@@ -409,6 +440,9 @@ void virtio_free_desc(struct vqs *vq, int id, uint64_t features)
 
 	id %= vq->size;
 	desc = &vq->desc[id];
+
+	#ifdef VIRTIO_USE_IOCAPS
+	#else
 
 	if (!(features & VIRTIO_F_VERSION_1) ||
 	    !(features & VIRTIO_F_IOMMU_PLATFORM))
@@ -419,16 +453,26 @@ void virtio_free_desc(struct vqs *vq, int id, uint64_t features)
 
 	SLOF_dma_map_out(le64_to_cpu(desc->addr), 0, le32_to_cpu(desc->len));
 	vq->desc_gpas[id] = NULL;
+
+	#endif
 }
 
 size_t virtio_desc_addr(struct virtio_device *vdev, int queue, int id)
 {
 	struct vqs *vq = &vdev->vq[queue];
 
+	#ifdef VIRTIO_USE_IOCAPS
+	uint64_t base = 0;
+	if (ccap_read_range(&vq->desc[id].cap, &base, NULL, NULL) != CCapResult_Success) {
+        fprintf(stderr, "Failed to get virtio_desc_addr\n");
+    }
+	return (size_t) base;
+	#else
 	if (vq->desc_gpas)
 		return (size_t) vq->desc_gpas[id];
 
 	return (size_t) virtio_modern64_to_cpu(vdev, vq->desc[id].addr);
+	#endif
 }
 
 /**
@@ -545,23 +589,23 @@ static void virtio_set_qaddr(struct virtio_device *dev, int queue, uint64_t qadd
 
 		#ifdef VIRTIO_USE_IOCAPS
 		// Generate and send an I/O capability.
-		// First, generate a key.
-		CCapU128 key = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
-
-		// Upload the key to the key manager, which expects 64-bit accesses
-		uint32_t secret_key_id = 0;
-		virtio_mmio_write128_group64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1000 + (secret_key_id << 4), key);
-		printf("virtio-iocap: wrote key to manager\n");
-		virtio_mmio_write64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, secret_key_id << 4, 1);
+		// Upload the queue key to the key manager, which expects 64-bit accesses
+		virtio_mmio_write128_group64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1000 + (global_queue_key_id << 4), global_queue_key);
+		printf("virtio-iocap: wrote queue key to manager\n");
+		virtio_mmio_write128_group64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1000 + (global_dma_key_id << 4), global_dma_key);
+		printf("virtio-iocap: wrote DMA key to manager\n");
+		virtio_mmio_write64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, global_queue_key_id << 4, 1);
+		virtio_mmio_write64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, global_dma_key_id << 4, 1);
 		// Wait for the key manager to accept the key (usually instant)
 		// Use 64-bit read here because the key manager can't handle anything else :grimace:
-		while (virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, secret_key_id << 4) != 1) {}
-		printf("virtio-iocap: uploaded key to manager (status = 1)\n");
+		while (virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, global_queue_key_id << 4) != 1) {}
+		while (virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, global_dma_key_id << 4) != 1) {}
+		printf("virtio-iocap: uploaded queue key to manager (status = 1)\n");
 
 		// Generate the iocap
 		CCap2024_02 queue_iocap;
 		uint64_t q_byte_len = end_of_q_used - q_desc;
-		if (ccap_init_inexact(&queue_iocap, key, q_desc, q_byte_len, secret_key_id, CCapPerms_ReadWrite) != CCapResult_Success) {
+		if (ccap_init_inexact(&queue_iocap, &global_queue_key, q_desc, q_byte_len, global_queue_key_id, CCapPerms_ReadWrite) != CCapResult_Success) {
 			printf("virtio-iocap: Failed to initialize queue_iocap!\n");
 		}
 		// Write out the IOcap to the device, which expects 32-bit accesses

@@ -73,6 +73,7 @@ CCapResult ccap_init_almighty(struct CCap2024_02 *cap,
 
 /**
  * Initialize a Cap2024_02 capability from scratch, given the contiguous memory range it grants access to, the permissions (Read|Write|Both), and the secret_id.
+ * Only uses the initial resource.
  * Calculates the capability signature given the packed data and the secret.
  *
  * cap and secret are non-optional, and the function returns `NullRequiredArgs` if either are null.
@@ -88,6 +89,18 @@ CCapResult ccap_init_exact(struct CCap2024_02 *cap,
                            uint64_t len,
                            uint32_t secret_id,
                            CCapPerms perms);
+
+/**
+ * Initialize a Cap2024_02 capability from scratch, given the contiguous memory range it grants access to, the permissions (Read|Write|Both), and the secret_id.
+ * Uses the initial resource and both caveats if necessary.
+ * Calculates the capability signature given the packed data and the secret.
+ */
+CCapResult ccap_init_cavs_exact(struct CCap2024_02 *cap,
+                                const CCapU128 *secret,
+                                uint64_t base,
+                                uint64_t len,
+                                uint32_t secret_id,
+                                CCapPerms perms);
 
 /**
  * Initialize a Cap2024_02 capability from scratch, given the contiguous memory range it grants access to, the permissions (Read|Write|Both), and the secret_id.

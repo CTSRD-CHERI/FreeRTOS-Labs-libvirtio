@@ -46,6 +46,14 @@
 #define VIRTIO_USE_MMIO 1
 #endif
 
+#ifdef VIRTIO_USE_IOCAPS
+#include "iocap/librust_caps_c.h"
+
+struct vring_desc {
+	CCap2024_02 cap;
+};
+#else
+
 /* Descriptor table entry - see Virtio Spec chapter 2.3.2 */
 struct vring_desc {
 	uint64_t addr;		/* Address (guest-physical) */
@@ -53,6 +61,8 @@ struct vring_desc {
 	uint16_t flags;		/* The flags as indicated above */
 	uint16_t next;		/* Next field if flags & NEXT */
 };
+
+#endif
 
 /* Definitions for vring_avail.flags */
 #define VRING_AVAIL_F_NO_INTERRUPT	1
