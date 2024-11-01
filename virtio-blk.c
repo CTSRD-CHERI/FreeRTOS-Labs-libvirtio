@@ -97,6 +97,7 @@ virtioblk_shutdown(struct virtio_device *dev)
 static void fill_blk_hdr(struct virtio_blk_req *blkhdr, bool is_modern,
                          uint32_t type, uint32_t ioprio, uint32_t sector)
 {
+	printf("sector: 0x%lx\n", sector);
 	if (is_modern) {
 		blkhdr->type = cpu_to_le32(type);
 		//blkhdr->ioprio = cpu_to_le32(ioprio);
@@ -194,6 +195,7 @@ virtioblk_transfer(struct virtio_device *dev, char *buf, uint64_t blocknum,
 	vq->avail->idx = virtio_cpu_to_modern16(dev, avail_idx + 1);
 
 	/* Tell HV that the queue is ready */
+	printf("virtio_queue_notify\n");
 	virtio_queue_notify(dev, 0);
 
 	/* Wait for host to consume the descriptor */
@@ -204,6 +206,8 @@ virtioblk_transfer(struct virtio_device *dev, char *buf, uint64_t blocknum,
 		if (time < SLOF_GetTimer())
 			break;
 	}
+
+	printf("virtio completed\n");
 
 	virtio_free_desc(vq, id, dev->features);
 	virtio_free_desc(vq, id + 1, dev->features);
