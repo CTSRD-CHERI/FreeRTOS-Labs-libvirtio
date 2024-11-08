@@ -50,7 +50,7 @@
 #include "iocap/librust_caps_c.h"
 
 struct vring_desc {
-	CCap2024_02 cap;
+	CCap2024_11 cap;
 };
 #else
 

@@ -406,9 +406,9 @@ void virtio_fill_desc(struct vqs *vq, int id, uint64_t features,
 		perms = CCapPerms_Write;
 	}
 
-	printf("virtio-iocap: ccap_init_cavs_exact addr: %016x len: %08x\n", addr, len);
-	if (ccap_init_cavs_exact(&desc->cap, global_dma_key, addr, len, secret_key_id, perms) != CCapResult_Success) {
-		printf("Oh no! ccap_init_cavs_exact of base 0x%016lx len: 0x%016x failed :(\n", addr, len);
+	printf("virtio-iocap: ccap2024_11_init_cavs_exact addr: %016x len: %08x\n", addr, len);
+	if (ccap2024_11_init_cavs_exact(&desc->cap, global_dma_key, addr, len, secret_key_id, perms) != CCapResult_Success) {
+		printf("Oh no! ccap2024_11_init_cavs_exact of base 0x%016lx len: 0x%016x failed :(\n", addr, len);
 	} else {
 		printf("success\n");
 	}
@@ -467,7 +467,7 @@ size_t virtio_desc_addr(struct virtio_device *vdev, int queue, int id)
 
 	#ifdef VIRTIO_USE_IOCAPS
 	uint64_t base = 0;
-	if (ccap_read_range(&vq->desc[id].cap, &base, NULL, NULL) != CCapResult_Success) {
+	if (ccap2024_11_read_range(&vq->desc[id].cap, &base, NULL, NULL) != CCapResult_Success) {
         fprintf(stderr, "Failed to get virtio_desc_addr\n");
     }
 	return (size_t) base;
@@ -620,9 +620,9 @@ static void virtio_set_qaddr(struct virtio_device *dev, int queue, uint64_t qadd
 		}
 		
 		// Generate the iocap
-		CCap2024_02 queue_iocap;
+		CCap2024_11 queue_iocap;
 		uint64_t q_byte_len = end_of_q_used - q_desc;
-		if (ccap_init_inexact(&queue_iocap, &global_queue_key, q_desc, q_byte_len, global_queue_key_id, CCapPerms_ReadWrite) != CCapResult_Success) {
+		if (ccap2024_11_init_inexact(&queue_iocap, &global_queue_key, q_desc, q_byte_len, global_queue_key_id, CCapPerms_ReadWrite) != CCapResult_Success) {
 			printf("virtio-iocap: Failed to initialize queue_iocap!\n");
 		}
 		// Write out the IOcap to the device, which expects 32-bit accesses
