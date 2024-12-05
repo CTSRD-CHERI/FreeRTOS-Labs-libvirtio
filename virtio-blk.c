@@ -127,16 +127,16 @@ virtioblk_transfer(struct virtio_device *dev, char *buf, uint64_t blocknum,
 	//struct virtio_blk_config *blkconf;
 	uint64_t capacity;
 	uint32_t time;
-	struct vqs *vq = &dev->vq[0];
+	volatile struct vqs *vq = &dev->vq[0];
 	volatile uint8_t status = -1;
 	volatile uint16_t *current_used_idx;
 	uint16_t last_used_idx, avail_idx;
 	int blk_size = DEFAULT_SECTOR_SIZE;
 
-	virtio_debug_keymngr();
+	// virtio_debug_keymngr();
 
-	printf("virtioblk_transfer: dev=%p buf=%p blocknum=%lli cnt=%li type=%i\n",
-		dev, buf, blocknum, cnt, type);
+	// printf("virtioblk_transfer: dev=%p buf=%p blocknum=%lli cnt=%li type=%i\n",
+		// dev, buf, blocknum, cnt, type);
 
 	/* Check whether request is within disk capacity */
 	capacity = virtio_get_config(dev,
@@ -193,9 +193,10 @@ virtioblk_transfer(struct virtio_device *dev, char *buf, uint64_t blocknum,
 	vq->avail->ring[avail_idx % vq->size] = virtio_cpu_to_modern16 (dev, id);
 	mb();
 	vq->avail->idx = virtio_cpu_to_modern16(dev, avail_idx + 1);
+	mb();
 
 	/* Tell HV that the queue is ready */
-	printf("virtio_queue_notify\n");
+	printf("virtio_queue_notify - device %p, vq %p, old avail_idx: %d, vq->avail->idx: %d\n", dev, vq, avail_idx, vq->avail->idx);
 	virtio_queue_notify(dev, 0);
 
 	/* Wait for host to consume the descriptor */
@@ -207,13 +208,13 @@ virtioblk_transfer(struct virtio_device *dev, char *buf, uint64_t blocknum,
 			break;
 	}
 
-	printf("virtio completed\n");
+	// printf("virtioblk_transfer completed\n");
 
 	virtio_free_desc(vq, id, dev->features);
 	virtio_free_desc(vq, id + 1, dev->features);
 	virtio_free_desc(vq, id + 2, dev->features);
 
-	virtio_debug_keymngr();
+	// virtio_debug_keymngr();
 	
 	if (status == 0)
 		return cnt;

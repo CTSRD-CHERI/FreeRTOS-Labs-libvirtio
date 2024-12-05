@@ -36,8 +36,8 @@
 #include <cheri/cheri-utility.h>
 #endif
 
-#undef DEBUG
-//#define DEBUG
+// #undef DEBUG
+#define DEBUG
 #ifdef DEBUG
 # define dprintf(fmt...) do { printf(fmt); } while(0)
 #else
@@ -301,6 +301,8 @@ static int virtionet_xmit(struct virtio_net *vnet, char *buf, int len)
 		return 0;
 	}
 
+	virtio_debug_keymngr();
+
 	dprintf("\nvirtionet_xmit(packet at %p, %d bytes)\n", vq_tx->buf_mem, len);
 
 	if (vdev->features & VIRTIO_F_VERSION_1)
@@ -334,6 +336,8 @@ static int virtionet_xmit(struct virtio_net *vnet, char *buf, int len)
 	last_tx_idx = (vq_tx->used->idx);
 
 	virtio_queue_notify(vdev, VQ_TX);
+
+	virtio_debug_keymngr();
 
 	return len;
 }
