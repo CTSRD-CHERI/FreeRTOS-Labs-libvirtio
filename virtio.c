@@ -406,7 +406,7 @@ void virtio_fill_desc(struct vqs *vq, int id, uint64_t features,
 		perms = CCapPerms_Write;
 	}
 
-	printf("virtio-iocap: ccap2024_11_init_cavs_exact addr: %016x len: %08x\n", addr, len);
+	printf("virtio-iocap: virtio_fill_desc addr: %016x len: %08x perms: %s secret_key_id: %06x\n", addr, len, ccap_perms_str(perms), secret_key_id);
 	if (ccap2024_11_init_cavs_exact(&desc->cap, global_dma_key, addr, len, secret_key_id, perms) != CCapResult_Success) {
 		printf("Oh no! ccap2024_11_init_cavs_exact of base 0x%016lx len: 0x%016x failed :(\n", addr, len);
 	} else {
