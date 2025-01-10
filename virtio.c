@@ -637,6 +637,8 @@ static void virtio_set_qaddr(struct virtio_device *dev, int queue, uint64_t qadd
 			#else
 			fprintf(stderr, "vq has use_desc_iocap enabled when VIRTIO_USE_IOCAPS is 0\n");
 			#endif
+		} else {
+			printf("virtio-iocap: support disabled for device %p queue %d\n", dev->mmio_base, queue);
 		}
 	} else {
 		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_PFN, qaddr >> 12);
@@ -658,8 +660,14 @@ struct vqs *virtio_queue_init_vq(struct virtio_device *dev, unsigned int id)
 
 	memset(vq, 0, sizeof(*vq));
 
-	// TODO make this conditional on an IOCap feature negotiated by the device
-	vq->use_desc_iocap = VIRTIO_USE_MMIO && VIRTIO_USE_IOCAPS && (dev->features & VIRTIO_F_VERSION_1);
+	vq->use_desc_iocap = (dev->features & VIRTIO_F_IOCAP_QUEUE) && (dev->features & VIRTIO_F_VERSION_1);
+
+	#if !(VIRTIO_USE_MMIO && VIRTIO_USE_IOCAPS)
+	if (dev->features & VIRTIO_F_IOCAP_QUEUE) {
+		printf("Negotiated VIRTIO_F_IOCAP_QUEUE when support was not compiled in\n");
+		return NULL;
+	}
+	#endif
 
 	// TODO if use_desc_iocap make sure this is always a size such that `next` fits in 13 bits.
 	vq->size = virtio_get_qsize(dev, id);
@@ -893,10 +901,16 @@ int virtio_negotiate_guest_features(struct virtio_device *dev, uint64_t features
 		return -1;
 	}
 
+
+	#if (VIRTIO_USE_MMIO && VIRTIO_USE_IOCAPS)
+	if (host_features & VIRTIO_F_IOCAP_QUEUE)
+		features |= VIRTIO_F_IOCAP_QUEUE;
+	// IOCAP_QUEUE and IOMMU_PLATFORM have not been tested together, => make them mutually exclusive for now
+	else
+	#endif
 	if (host_features & VIRTIO_F_IOMMU_PLATFORM)
 		features |= VIRTIO_F_IOMMU_PLATFORM;
 
-	// TODO if host_features & VIRTIO_F_IOCAP_PLATFORM...
 
 	virtio_set_guest_features(dev,  features);
 	host_features = virtio_get_host_features(dev);

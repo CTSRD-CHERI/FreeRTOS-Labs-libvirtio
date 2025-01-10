@@ -23,13 +23,20 @@
 #define VIRTIO_STAT_NEEDS_RESET		64
 #define VIRTIO_STAT_FAILED		128
 
-#define BIT(x) (1UL << (x))
+#define BIT(x) (1ULL << (x))
 
 /* VIRTIO 1.0 Device independent feature bits */
 #define VIRTIO_F_RING_INDIRECT_DESC	BIT(28)
 #define VIRTIO_F_RING_EVENT_IDX		BIT(29)
 #define VIRTIO_F_VERSION_1		((uint64_t) BIT(32))
 #define VIRTIO_F_IOMMU_PLATFORM        ((uint64_t) BIT(33))
+
+/* Custom VIRTIO IOCap feature bit.
+When negotiated, VIRTIO_MMIO_QUEUE_IOCAP_{TXT,SIG}_WORD{0,1,2,3} in the device MMIO space
+must be populated with an IOCap for each queue (using VIRTIO_MMIO_QUEUE_SEL),
+and the descriptors in each queue must be 256-bit IOCaps.
+*/
+#define VIRTIO_F_IOCAP_QUEUE ((uint64_t) BIT(41))
 
 #define VIRTIO_TIMEOUT		        5000 /* 5 sec timeout */
 
