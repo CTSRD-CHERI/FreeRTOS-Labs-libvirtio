@@ -28,7 +28,7 @@
 #include "helpers.h"
 #include "virtio-internal.h"
 
-#ifdef VIRTIO_USE_IOCAPS
+#if VIRTIO_USE_IOCAPS
 #include "iocap/librust_caps_c.h"
 
 static bool has_setup_global_keys = false;
@@ -285,9 +285,9 @@ struct virtio_device *virtio_setup_vd(void *device_base)
 /**
  * Calculate ring size according to queue size number
  */
-unsigned long virtio_vring_size(unsigned int qsize)
+unsigned long virtio_vring_size(unsigned int qsize, size_t desc_size)
 {
-	return VQ_ALIGN(sizeof(struct vring_desc) * qsize +
+	return VQ_ALIGN(desc_size * qsize +
 			sizeof(struct vring_avail) + sizeof(uint16_t) * qsize) +
 		VQ_ALIGN(sizeof(struct vring_used) +
 			 sizeof(struct vring_used_elem) * qsize);
@@ -343,7 +343,7 @@ unsigned int virtio_get_qsize(struct virtio_device *dev, int queue)
  * @param   queue virtio queue number
  * @return  pointer to the descriptor ring
  */
-struct vring_desc *virtio_get_vring_desc(struct virtio_device *dev, int queue)
+vqs_desc virtio_get_vring_desc(struct virtio_device *dev, int queue)
 {
 	return dev->vq[queue].desc;
 }
@@ -379,74 +379,68 @@ void virtio_fill_desc(struct vqs *vq, int id, uint64_t features,
                       uint64_t addr, uint32_t len,
                       uint16_t flags, uint16_t next)
 {
-	struct vring_desc *desc;
 
 	id %= vq->size;
-	desc = &vq->desc[id];
 	next %= vq->size;
 
-	#ifdef VIRTIO_USE_IOCAPS
-    // Pack the `flag` bits and `next` into secret_key_id. 
-    // This is 23-bits long, but the current setup only uses 255 keys i.e. 8 bits.
-    // Thus, we can take up 15 bits. 2 for the next|indirect flags, 13 for the 'next' field.
-    // |- flags[1:0] -|- next[12:0] -|- key[7:0] -|
-    //     [22:21]         [20:8]         [7:0]
+	if (vq->use_desc_iocap) {
+		#if VIRTIO_USE_IOCAPS
+		CCapNativeVirtqDesc native_desc = {
+			.addr = addr,
+			.len = len,
+			.flags = flags,
+			.next = next,
+		};
+		CCap2024_11* iocap = &vq->desc.desc_iocap[id];
 
-	uint32_t secret_key_id = (global_dma_key_id & 0xFF) | ((uint32_t)(next & 0x1FFF) << 8);
-	if (flags & VRING_DESC_F_NEXT) {
-		secret_key_id |= 1 << 21;
-	}
-	if (flags & VRING_DESC_F_INDIRECT) {
-		secret_key_id |= 1 << 22;
-	}
-
-	// virtio is Read XOR Write
-	CCapPerms perms = CCapPerms_Read;
-	if (flags & VRING_DESC_F_WRITE) {
-		perms = CCapPerms_Write;
-	}
-
-	printf("virtio-iocap: virtio_fill_desc addr: %016x len: %08x perms: %s secret_key_id: %06x\n", addr, len, ccap_perms_str(perms), secret_key_id);
-	if (ccap2024_11_init_cavs_exact(&desc->cap, global_dma_key, addr, len, secret_key_id, perms) != CCapResult_Success) {
-		printf("Oh no! ccap2024_11_init_cavs_exact of base 0x%016lx len: 0x%016x failed :(\n", addr, len);
-	} else {
-		printf("success\n");
-	}
-	#else
-	if (features & VIRTIO_F_VERSION_1) {
-		if (features & VIRTIO_F_IOMMU_PLATFORM) {
-			void *gpa = (void *) addr;
-
-			if (!vq->desc_gpas) {
-				fprintf(stderr, "IOMMU setup has not been done!\n");
-				return;
-			}
-
-			addr = SLOF_dma_map_in(gpa, len, 0);
-			vq->desc_gpas[id] = gpa;
+		printf("virtio-iocap: virtio_fill_desc from virtio addr: %016x len: %08x flags: %x next: %x\n", addr, len, flags, next);
+		if (ccap2024_11_init_virtio_cavs_exact(iocap, global_dma_key, &native_desc, global_dma_key_id)) {
+			printf("Oh no! ccap2024_11_init_cavs_exact of base 0x%016lx len: 0x%016x failed :(\n", addr, len);
+		} else {
+			printf("success\n");
 		}
-		desc->addr = cpu_to_le64(addr);
-		desc->len = cpu_to_le32(len);
-		desc->flags = cpu_to_le16(flags);
-		desc->next = cpu_to_le16(next);
+		#else
+		fprintf(stderr, "vq has use_desc_iocap enabled when VIRTIO_USE_IOCAPS is 0\n");
+		#endif
 	} else {
-		desc->addr = addr;
-		desc->len = len;
-		desc->flags = flags;
-		desc->next = next;
+		struct vring_desc *desc;
+	
+		desc = &vq->desc.desc_direct[id];
+		
+		if (features & VIRTIO_F_VERSION_1) {
+			if (features & VIRTIO_F_IOMMU_PLATFORM) {
+				void *gpa = (void *) addr;
+
+				if (!vq->desc_gpas) {
+					fprintf(stderr, "IOMMU setup has not been done!\n");
+					return;
+				}
+
+				addr = SLOF_dma_map_in(gpa, len, 0);
+				vq->desc_gpas[id] = gpa;
+			}
+			desc->addr = cpu_to_le64(addr);
+			desc->len = cpu_to_le32(len);
+			desc->flags = cpu_to_le16(flags);
+			desc->next = cpu_to_le16(next);
+		} else {
+			desc->addr = addr;
+			desc->len = len;
+			desc->flags = flags;
+			desc->next = next;
+		}
 	}
-	#endif
 }
 
 void virtio_free_desc(struct vqs *vq, int id, uint64_t features)
 {
+	// IOCaps do not have virtualized addresses, so there aren't any IOMMU invalidation steps we have to do here.
+	if (vq->use_desc_iocap) return;
+
 	struct vring_desc *desc;
 
 	id %= vq->size;
-	desc = &vq->desc[id];
-
-	#ifdef VIRTIO_USE_IOCAPS
-	#else
+	desc = &vq->desc.desc_direct[id];
 
 	if (!(features & VIRTIO_F_VERSION_1) ||
 	    !(features & VIRTIO_F_IOMMU_PLATFORM))
@@ -457,26 +451,29 @@ void virtio_free_desc(struct vqs *vq, int id, uint64_t features)
 
 	SLOF_dma_map_out(le64_to_cpu(desc->addr), 0, le32_to_cpu(desc->len));
 	vq->desc_gpas[id] = NULL;
-
-	#endif
 }
 
 size_t virtio_desc_addr(struct virtio_device *vdev, int queue, int id)
 {
 	struct vqs *vq = &vdev->vq[queue];
 
-	#ifdef VIRTIO_USE_IOCAPS
-	uint64_t base = 0;
-	if (ccap2024_11_read_range(&vq->desc[id].cap, &base, NULL, NULL) != CCapResult_Success) {
-        fprintf(stderr, "Failed to get virtio_desc_addr\n");
-    }
-	return (size_t) base;
-	#else
-	if (vq->desc_gpas)
-		return (size_t) vq->desc_gpas[id];
+	if (vq->use_desc_iocap) {
+		#if VIRTIO_USE_IOCAPS
+		uint64_t base = 0;
+		if (ccap2024_11_read_range(&vq->desc.desc_iocap[id], &base, NULL, NULL) != CCapResult_Success) {
+			fprintf(stderr, "Failed to get virtio_desc_addr\n");
+		}
+		return (size_t) base;
+		#else
+		fprintf(stderr, "vq has use_desc_iocap enabled when VIRTIO_USE_IOCAPS is 0\n");
+		return 0;
+		#endif
+	} else {
+		if (vq->desc_gpas)
+			return (size_t) vq->desc_gpas[id];
 
-	return (size_t) virtio_modern64_to_cpu(vdev, vq->desc[id].addr);
-	#endif
+		return (size_t) virtio_modern64_to_cpu(vdev, vq->desc.desc_direct[id].addr);
+	}
 }
 
 /**
@@ -525,12 +522,17 @@ void virtio_queue_notify(struct virtio_device *dev, int queue)
 }
 
 /**
- * Set queue address
+ * Set queue address.
+ * 
+ * Should only be called from virtio_queue_init_vq.
+ * TODO only use the vq pointer instead of recalculating q_avail, q_used, q_desc from qaddr.
  */
 static void virtio_set_qaddr(struct virtio_device *dev, int queue, uint64_t qaddr)
 {
 #ifdef VIRTIO_USE_PCI
 	if (dev->features & VIRTIO_F_VERSION_1) {
+		// Note: in MMIO-land these calculations may not be correct, because the length of the descriptor queue may change if IOCaps are used.
+		// Right now IOCaps are not used on PCI mode.
 		uint64_t q_desc = qaddr;
 		uint64_t q_avail;
 		uint64_t q_used;
@@ -571,17 +573,17 @@ static void virtio_set_qaddr(struct virtio_device *dev, int queue, uint64_t qadd
 	sync();
 
 	if (dev->features & VIRTIO_F_VERSION_1) {
-		uint64_t q_desc = qaddr;
-		uint64_t q_avail;
-		uint64_t q_used;
+		struct vqs *vq = &dev->vq[queue];
+
+		uint64_t q_desc = (uint64_t)vq->desc.desc_void;
+		uint64_t q_avail = (uint64_t)vq->avail;
+		uint64_t q_used = (uint64_t)vq->used;
 		uint32_t q_size = virtio_get_qsize(dev, queue);
 
-		q_avail = q_desc + q_size * sizeof(struct vring_desc);
-		q_used = VQ_ALIGN(q_avail + sizeof(struct vring_avail) + sizeof(uint16_t) * q_size);
 		uint64_t end_of_q_used = q_used + sizeof(struct vring_used) + sizeof(struct vring_used_elem) * q_size;
 
-		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_DESC_LOW, (qaddr & UINT32_MAX));
-		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_DESC_HIGH, (((uint64_t) qaddr >> 32) & UINT32_MAX));
+		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_DESC_LOW, (q_desc & UINT32_MAX));
+		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_DESC_HIGH, (((uint64_t) q_desc >> 32) & UINT32_MAX));
 
 		// Avail
 		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_AVAIL_LOW, (q_avail & UINT32_MAX));
@@ -591,47 +593,51 @@ static void virtio_set_qaddr(struct virtio_device *dev, int queue, uint64_t qadd
 		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_USED_LOW, (q_used & UINT32_MAX));
 		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_USED_HIGH, (((uint64_t) q_used >> 32) & UINT32_MAX));
 
-		#ifdef VIRTIO_USE_IOCAPS
-		// Right now we allocate a single global key for virtio queues, and a single global key for dma descriptors.
-		// The former is likely fine (in FreeRTOS context we're unlikely to try and tear down a virtio queue)
-		// the latter is likely not (much more common to create and destroy descriptors - once destroyed, we should render them inaccessible.)
-		// TODO - track available key ids, allocate DMA key ids and values to each virtio_device, save them in the virtio_device struct.
+		if (vq->use_desc_iocap) {
+			#if VIRTIO_USE_IOCAPS
+			// Right now we allocate a single global key for virtio queues, and a single global key for dma descriptors.
+			// The former is likely fine (in FreeRTOS context we're unlikely to try and tear down a virtio queue)
+			// the latter is likely not (much more common to create and destroy descriptors - once destroyed, we should render them inaccessible.)
+			// TODO - track available key ids, allocate DMA key ids and values to each virtio_device, save them in the virtio_device struct.
 
-		// Generate and send an I/O capability.
+			// Generate and send an I/O capability.
 
-		if (!has_setup_global_keys) {
-			// Upload the queue key to the key manager, which expects 64-bit accesses
-			printf("virtio-iocap: setup global keys\n");
-			virtio_mmio_write128_group64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1000 + (global_queue_key_id << 4), global_queue_key);
-			printf("virtio-iocap: wrote global queue key to manager\n");
-			virtio_mmio_write128_group64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1000 + (global_dma_key_id << 4), global_dma_key);
-			printf("virtio-iocap: wrote global DMA key to manager\n");
-			virtio_mmio_write64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, global_queue_key_id << 4, 1);
-			virtio_mmio_write64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, global_dma_key_id << 4, 1);
-			// Wait for the key manager to accept the key (usually instant)
-			// Use 64-bit read here because the key manager can't handle anything else :grimace:
-			while (virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, global_queue_key_id << 4) != 1) {}
-			while (virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, global_dma_key_id << 4) != 1) {}
-			printf("virtio-iocap: manager accepted global keys (status = 1)\n");
+			if (!has_setup_global_keys) {
+				// Upload the queue key to the key manager, which expects 64-bit accesses
+				printf("virtio-iocap: setup global keys\n");
+				virtio_mmio_write128_group64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1000 + (global_queue_key_id << 4), global_queue_key);
+				printf("virtio-iocap: wrote global queue key to manager\n");
+				virtio_mmio_write128_group64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1000 + (global_dma_key_id << 4), global_dma_key);
+				printf("virtio-iocap: wrote global DMA key to manager\n");
+				virtio_mmio_write64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, global_queue_key_id << 4, 1);
+				virtio_mmio_write64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, global_dma_key_id << 4, 1);
+				// Wait for the key manager to accept the key (usually instant)
+				// Use 64-bit read here because the key manager can't handle anything else :grimace:
+				while (virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, global_queue_key_id << 4) != 1) {}
+				while (virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, global_dma_key_id << 4) != 1) {}
+				printf("virtio-iocap: manager accepted global keys (status = 1)\n");
 
-			has_setup_global_keys = true;
-		} else {
-			printf("virtio-iocap: global keys already set up\n");
+				has_setup_global_keys = true;
+			} else {
+				printf("virtio-iocap: global keys already set up\n");
+			}
+			
+			// Generate the iocap
+			CCap2024_11 queue_iocap;
+			uint64_t q_byte_len = end_of_q_used - q_desc;
+			if (ccap2024_11_init_inexact(&queue_iocap, &global_queue_key, q_desc, q_byte_len, global_queue_key_id, CCapPerms_ReadWrite) != CCapResult_Success) {
+				printf("virtio-iocap: Failed to initialize queue_iocap!\n");
+			}
+			// Write out the IOcap to the device, which expects 32-bit accesses
+			virtio_mmio_write128_group32(dev->mmio_base, VIRTIO_MMIO_QUEUE_IOCAP_TXT_WORD0, queue_iocap.data);
+			virtio_mmio_write128_group32(dev->mmio_base, VIRTIO_MMIO_QUEUE_IOCAP_SIG_WORD0, queue_iocap.signature);
+			printf("virtio-iocap: Wrote queue_iocap text and signature to device\n");
+
+			virtio_debug_keymngr();
+			#else
+			fprintf(stderr, "vq has use_desc_iocap enabled when VIRTIO_USE_IOCAPS is 0\n");
+			#endif
 		}
-		
-		// Generate the iocap
-		CCap2024_11 queue_iocap;
-		uint64_t q_byte_len = end_of_q_used - q_desc;
-		if (ccap2024_11_init_inexact(&queue_iocap, &global_queue_key, q_desc, q_byte_len, global_queue_key_id, CCapPerms_ReadWrite) != CCapResult_Success) {
-			printf("virtio-iocap: Failed to initialize queue_iocap!\n");
-		}
-		// Write out the IOcap to the device, which expects 32-bit accesses
-		virtio_mmio_write128_group32(dev->mmio_base, VIRTIO_MMIO_QUEUE_IOCAP_TXT_WORD0, queue_iocap.data);
-		virtio_mmio_write128_group32(dev->mmio_base, VIRTIO_MMIO_QUEUE_IOCAP_SIG_WORD0, queue_iocap.signature);
-		printf("virtio-iocap: Wrote queue_iocap text and signature to device\n");
-
-		virtio_debug_keymngr();
-		#endif
 	} else {
 		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_PFN, qaddr >> 12);
 		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_NUM, 1024);
@@ -652,18 +658,36 @@ struct vqs *virtio_queue_init_vq(struct virtio_device *dev, unsigned int id)
 
 	memset(vq, 0, sizeof(*vq));
 
+	// TODO make this conditional on an IOCap feature negotiated by the device
+	vq->use_desc_iocap = VIRTIO_USE_MMIO && VIRTIO_USE_IOCAPS && (dev->features & VIRTIO_F_VERSION_1);
+
+	// TODO if use_desc_iocap make sure this is always a size such that `next` fits in 13 bits.
 	vq->size = virtio_get_qsize(dev, id);
-	vq->desc = SLOF_alloc_mem_aligned(virtio_vring_size(vq->size), 4096);
-	if (!vq->desc) {
+
+	// Depending on use_desc_iocap, the queue sizes will be different
+	size_t vq_desc_size;
+	if (vq->use_desc_iocap) {
+		#if VIRTIO_USE_IOCAPS
+		vq_desc_size = virtio_vring_size(vq->size, sizeof(struct CCap2024_11));
+		#else
+		fprintf(stderr, "vq has use_desc_iocap enabled when VIRTIO_USE_IOCAPS is 0\n");
+		return NULL;
+		#endif
+	} else {
+		vq_desc_size = virtio_vring_size(vq->size, sizeof(struct vring_desc));
+	}
+
+	vq->desc.desc_void = SLOF_alloc_mem_aligned(vq_desc_size, 4096);
+	if (!vq->desc.desc_void) {
 		printf("memory allocation failed!\n");
 		return NULL;
 	}
 
-	vq->avail = (void *) ((size_t) vq->desc + vq->size * sizeof(struct vring_desc));
+	vq->avail = (void *) ((size_t) vq->desc.desc_void + vq->size * sizeof(struct vring_desc));
 
 #ifdef __CHERI_PURE_CAPABILITY__
 	/* Avail ring is  written by the driver */
-	vq->avail = cheri_derive_data_cap(vq->desc,
+	vq->avail = cheri_derive_data_cap(vq->desc.desc_void,
 									  (ptraddr_t) vq->avail,
 									  sizeof(struct vring_avail) + sizeof(uint16_t) * vq->size,
 									  __CHERI_CAP_PERMISSION_PERMIT_LOAD__ |
@@ -676,14 +700,14 @@ struct vqs *virtio_queue_init_vq(struct virtio_device *dev, unsigned int id)
 
 #ifdef __CHERI_PURE_CAPABILITY__
 	/* Used ring is only written by the device, and read by the driver */
-	vq->used = cheri_derive_data_cap(vq->desc,
+	vq->used = cheri_derive_data_cap(vq->desc.desc_void,
 									 (ptraddr_t) vq->used,
 									 sizeof(struct vring_used) + sizeof(struct vring_used_elem) * vq->size,
 									 __CHERI_CAP_PERMISSION_PERMIT_LOAD__);
 #endif
 
-	memset(vq->desc, 0, virtio_vring_size(vq->size));
-	virtio_set_qaddr(dev, id, (uint64_t)vq->desc);
+	memset(vq->desc.desc_void, 0, vq_desc_size);
+	virtio_set_qaddr(dev, id, (uint64_t)vq->desc.desc_void);
 
 	vq->avail->flags = virtio_cpu_to_modern16(dev, VRING_AVAIL_F_NO_INTERRUPT);
 	vq->avail->idx = 0;
@@ -704,7 +728,7 @@ void virtio_queue_term_vq(struct virtio_device *dev, struct vqs *vq, unsigned in
 
 		SLOF_free_mem_aligned(vq->desc_gpas);
 	}
-	if (vq->desc) {
+	if (!vq->use_desc_iocap && vq->desc.desc_direct) {
 		if (dev->features & VIRTIO_F_IOMMU_PLATFORM) {
 			unsigned long cb;
 			uint32_t q_size = virtio_get_qsize(dev, id);
@@ -719,9 +743,11 @@ void virtio_queue_term_vq(struct virtio_device *dev, struct vqs *vq, unsigned in
 
 			SLOF_dma_map_out(vq->bus_desc, 0, cb);
 		}
-
-		SLOF_free_mem_aligned(vq->desc);
 	}
+	if (vq->desc.desc_void) {
+		SLOF_free_mem_aligned(vq->desc.desc_void);
+	}
+
 	memset(vq, 0, sizeof(*vq));
 }
 
@@ -870,6 +896,8 @@ int virtio_negotiate_guest_features(struct virtio_device *dev, uint64_t features
 	if (host_features & VIRTIO_F_IOMMU_PLATFORM)
 		features |= VIRTIO_F_IOMMU_PLATFORM;
 
+	// TODO if host_features & VIRTIO_F_IOCAP_PLATFORM...
+
 	virtio_set_guest_features(dev,  features);
 	host_features = virtio_get_host_features(dev);
 	if ((host_features & features) != features) {
@@ -987,7 +1015,7 @@ int __virtio_read_config(struct virtio_device *dev, void *dst,
 }
 
 void virtio_debug_keymngr(void) {
-	#ifdef VIRTIO_USE_IOCAPS
+	#if VIRTIO_USE_IOCAPS
 	// Read the iocap stats out
 	uint64_t gw = virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1000);
 	uint64_t bw = virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1008);

@@ -46,13 +46,13 @@
 #define VIRTIO_USE_MMIO 1
 #endif
 
-#ifdef VIRTIO_USE_IOCAPS
-#include "iocap/librust_caps_c.h"
+#ifndef VIRTIO_USE_IOCAPS
+#define VIRTIO_USE_IOCAPS 0
+#endif
 
-struct vring_desc {
-	CCap2024_11 cap;
-};
-#else
+#if VIRTIO_USE_IOCAPS
+#include "iocap/librust_caps_c.h"
+#endif
 
 /* Descriptor table entry - see Virtio Spec chapter 2.3.2 */
 struct vring_desc {
@@ -61,8 +61,6 @@ struct vring_desc {
 	uint16_t flags;		/* The flags as indicated above */
 	uint16_t next;		/* Next field if flags & NEXT */
 };
-
-#endif
 
 /* Definitions for vring_avail.flags */
 #define VRING_AVAIL_F_NO_INTERRUPT	1
@@ -96,14 +94,26 @@ struct virtio_cap {
 	uint8_t cap_id;
 };
 
+typedef union {
+	struct vring_desc *desc_direct;
+	#if VIRTIO_USE_IOCAPS
+	CCap2024_11 *desc_iocap;
+	#endif
+	// For use in generic cases that just take a pointer value
+	void* desc_void;
+} vqs_desc;
+
 struct vqs {
 	uint32_t size;
 	void *buf_mem;
-	struct vring_desc *desc;
+	// Allocated to be an array of (vring_desc) or (CCap2024_11) based on use_desc_iocap (TODO make this based on a negotiated feature)
+	vqs_desc desc;
 	struct vring_avail *avail;
 	struct vring_used *used;
 	void **desc_gpas; /* to get gpa from desc->addr (which is ioba) */
 	uint64_t bus_desc;
+	// 0 if `desc` is an array of `struct vring_desc`, otherwise it is an array of CCap2024_11
+	uint8_t use_desc_iocap;
 };
 
 #ifdef VIRTIO_USE_PCI
@@ -134,9 +144,9 @@ typedef struct {
 /* Parts of the virtqueue are aligned on a 4096 byte page boundary */
 #define VQ_ALIGN(addr)	(((addr) + 0xfff) & ~0xfff)
 
-extern unsigned long virtio_vring_size(unsigned int qsize);
+extern unsigned long virtio_vring_size(unsigned int qsize, size_t desc_size);
 extern unsigned int virtio_get_qsize(struct virtio_device *dev, int queue);
-extern struct vring_desc *virtio_get_vring_desc(struct virtio_device *dev, int queue);
+extern vqs_desc virtio_get_vring_desc(struct virtio_device *dev, int queue);
 extern struct vring_avail *virtio_get_vring_avail(struct virtio_device *dev, int queue);
 extern struct vring_used *virtio_get_vring_used(struct virtio_device *dev, int queue);
 extern void virtio_fill_desc(struct vqs *vq, int id, uint64_t features,
