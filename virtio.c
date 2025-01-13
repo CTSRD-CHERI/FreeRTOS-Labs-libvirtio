@@ -29,7 +29,7 @@
 #include "virtio-internal.h"
 
 #if VIRTIO_USE_IOCAPS
-#include "iocap/librust_caps_c.h"
+#include "iocap/libccap.h"
 
 static bool has_setup_global_keys = false;
 const static CCapU128 global_queue_key = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
@@ -1030,12 +1030,12 @@ int __virtio_read_config(struct virtio_device *dev, void *dst,
 
 void virtio_debug_keymngr(void) {
 	#if VIRTIO_USE_IOCAPS
-	// Read the iocap stats out
+		// Read the iocap stats out
 	uint64_t gw = virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1000);
 	uint64_t bw = virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1008);
 	uint64_t gr = virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1010);
 	uint64_t br = virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1018);
 
-	printf("virtio-iocap: stats gw %3d bw %3d gr %3d br %3d\n", gw, bw, gr, br);
+		printf("virtio-iocap: stats gw %3d bw %3d gr %3d br %3d\n", gw, bw, gr, br);
 	#endif
 }

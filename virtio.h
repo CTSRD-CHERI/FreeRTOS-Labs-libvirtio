@@ -58,7 +58,7 @@ and the descriptors in each queue must be 256-bit IOCaps.
 #endif
 
 #if VIRTIO_USE_IOCAPS
-#include "iocap/librust_caps_c.h"
+#include "iocap/libccap.h"
 #endif
 
 /* Descriptor table entry - see Virtio Spec chapter 2.3.2 */

@@ -34,7 +34,7 @@
 #define	_VIRTIO_MMIO_H
 
 #ifdef VIRTIO_USE_IOCAPS
-#include "iocap/librust_caps_c.h"
+#include "iocap/libccap.h"
 #endif
 
 #define	VIRTIO_MMIO_MAGIC_VALUE		0x000
