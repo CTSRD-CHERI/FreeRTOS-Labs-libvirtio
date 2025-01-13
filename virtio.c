@@ -32,6 +32,7 @@
 #include "iocap/libccap.h"
 
 static bool has_setup_global_keys = false;
+static void* iocap_keymgr_ptr = NULL;
 const static CCapU128 global_queue_key = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
 const static uint32_t global_queue_key_id = 0;
 const static CCapU128 global_dma_key = {0xDE, 0xAD, 0xBE, 0xEF};
@@ -603,18 +604,28 @@ static void virtio_set_qaddr(struct virtio_device *dev, int queue, uint64_t qadd
 			// Generate and send an I/O capability.
 
 			if (!has_setup_global_keys) {
+				#ifdef __CHERI_PURE_CAPABILITY__
+				iocap_keymgr_ptr = cheri_build_data_cap( ( ptraddr_t ) VIRTIO_IOCAP_KEYMNGR_ADDRESS,
+															0x2008,
+															__CHERI_CAP_PERMISSION_GLOBAL__ |
+															__CHERI_CAP_PERMISSION_PERMIT_LOAD__ |
+															__CHERI_CAP_PERMISSION_PERMIT_STORE__ );
+				#else
+				iocap_keymgr_ptr = (void*)VIRTIO_IOCAP_KEYMNGR_ADDRESS;
+				#endif
+
 				// Upload the queue key to the key manager, which expects 64-bit accesses
 				printf("virtio-iocap: setup global keys\n");
-				virtio_mmio_write128_group64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1000 + (global_queue_key_id << 4), global_queue_key);
+				virtio_mmio_write128_group64(iocap_keymgr_ptr, 0x1000 + (global_queue_key_id << 4), global_queue_key);
 				printf("virtio-iocap: wrote global queue key to manager\n");
-				virtio_mmio_write128_group64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1000 + (global_dma_key_id << 4), global_dma_key);
+				virtio_mmio_write128_group64(iocap_keymgr_ptr, 0x1000 + (global_dma_key_id << 4), global_dma_key);
 				printf("virtio-iocap: wrote global DMA key to manager\n");
-				virtio_mmio_write64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, global_queue_key_id << 4, 1);
-				virtio_mmio_write64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, global_dma_key_id << 4, 1);
+				virtio_mmio_write64(iocap_keymgr_ptr, global_queue_key_id << 4, 1);
+				virtio_mmio_write64(iocap_keymgr_ptr, global_dma_key_id << 4, 1);
 				// Wait for the key manager to accept the key (usually instant)
 				// Use 64-bit read here because the key manager can't handle anything else :grimace:
-				while (virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, global_queue_key_id << 4) != 1) {}
-				while (virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, global_dma_key_id << 4) != 1) {}
+				while (virtio_mmio_read64(iocap_keymgr_ptr, global_queue_key_id << 4) != 1) {}
+				while (virtio_mmio_read64(iocap_keymgr_ptr, global_dma_key_id << 4) != 1) {}
 				printf("virtio-iocap: manager accepted global keys (status = 1)\n");
 
 				has_setup_global_keys = true;
@@ -1030,12 +1041,16 @@ int __virtio_read_config(struct virtio_device *dev, void *dst,
 
 void virtio_debug_keymngr(void) {
 	#if VIRTIO_USE_IOCAPS
+	if (has_setup_global_keys) {
 		// Read the iocap stats out
-	uint64_t gw = virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1000);
-	uint64_t bw = virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1008);
-	uint64_t gr = virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1010);
-	uint64_t br = virtio_mmio_read64((uint32_t*)VIRTIO_IOCAP_KEYMNGR_ADDRESS, 0x1018);
+		uint64_t gw = virtio_mmio_read64(iocap_keymgr_ptr, 0x1000);
+		uint64_t bw = virtio_mmio_read64(iocap_keymgr_ptr, 0x1008);
+		uint64_t gr = virtio_mmio_read64(iocap_keymgr_ptr, 0x1010);
+		uint64_t br = virtio_mmio_read64(iocap_keymgr_ptr, 0x1018);
 
 		printf("virtio-iocap: stats gw %3d bw %3d gr %3d br %3d\n", gw, bw, gr, br);
+	} else {
+		printf("virtio-iocap: stats null, don't yet have the iocap_keymgr_ptr");
+	}
 	#endif
 }
