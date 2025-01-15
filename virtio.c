@@ -303,37 +303,76 @@ unsigned long virtio_vring_size(unsigned int qsize, size_t desc_size)
  */
 unsigned int virtio_get_qsize(struct virtio_device *dev, int queue)
 {
+	return dev->vq[queue].size;
+}
+
+/**
+ * Negotiate the number of elements in a vring and upload to the virtqueue.
+ * TODO move into virtio_queue_init_vq
+ * @param   dev  pointer to virtio device information
+ * @param   queue virtio queue number
+ * @param   max_size the maximum size FreeRTOS would like to negotiate. Must be a power-of-two (TODO unless VIRTIO_F_RING_PACKED is negotiated?)
+ * @return  number of elements
+ */
+unsigned int virtio_negotiate_qsize(struct virtio_device *dev, int queue, uint16_t max_size)
+{
 #ifdef VIRTIO_USE_PCI
 	unsigned int size = 0;
 
 	if (dev->features & VIRTIO_F_VERSION_1) {
+		// Virtio Spec 1.2 $4.1.5.1.3 Virtqueue Configuration
+		// 1. Write the virtqueue index to queue_select
 		void *addr = dev->common.addr + offset_of(struct virtio_dev_common, q_select);
 		ci_write_16(addr, cpu_to_le16(queue));
 		eieio();
+		// 2. Read the virtqueue size from queue_size. If the field is zero, the queue does not exist
 		addr = dev->common.addr + offset_of(struct virtio_dev_common, q_size);
 		size = le16_to_cpu(ci_read_16(addr));
+
+		// 3. Optionally, select a smaller virtqueue size and write it to queue_size.
+		if (size > max_size) {
+			ci_write_16(addr, cpu_to_le16(max_size));
+			eieio();
+			size = max_size;
+		}
 	}
 	else {
+		// Virtio Spec 1.2 $4.1.5.1.3.1 Legacy Interface: A Note on Virtqueue Configuration
+		// "There was no mechanism to negotiate the queue size"
 		ci_write_16(dev->legacy.addr+VIRTIOHDR_QUEUE_SELECT,
 			    cpu_to_le16(queue));
 		eieio();
 		size = le16_to_cpu(ci_read_16(dev->legacy.addr+VIRTIOHDR_QUEUE_SIZE));
+	
+		if (size > max_size) {
+			fprintf(stderr, "Warning: Legacy PCI device presents a queue size larger than our max, which cannot be negotiated down.\n");
+		}
 	}
 
 	return size;
 #elif VIRTIO_USE_MMIO
 
+	// Virtio spec 1.2 $4.2.3.2 Virtqueue Configuration
+	// 1. Select the queue writing its index (first queue is 0) to QueueSel.
 	virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_SEL, queue);
 	sync();
-
-	if (dev->features & VIRTIO_F_VERSION_1) {
-		return virtio_mmio_read32(dev->mmio_base, VIRTIO_MMIO_QUEUE_NUM);
-	} else {
-		// FIXME: This is always reading 0 even if it's written with a different
-		// value (only on QEMU/Legacy virtio). Use VIRTIO_MMIO_QUEUE_NUM_MAX instead.
-		//return virtio_mmio_read31(VIRTIO_MMIO_QUEUE_NUM);
-		return virtio_mmio_read32(dev->mmio_base, VIRTIO_MMIO_QUEUE_NUM_MAX);
+	// 2. IGNORED Check if the queue is not already in use: read QueueReady, and expect a returned value of zero (0x0).
+	// 3. Read maximum queue size (number of elements) from QueueNumMax. If the returned value is zero (0x0) the queue is not available.
+	uint32_t size = virtio_mmio_read32(dev->mmio_base, VIRTIO_MMIO_QUEUE_NUM_MAX);
+	if (size == 0) return 0;
+	// 3a. Decide what queue size you want based on the maximum
+	if (size > max_size) {
+		size = max_size;
 	}
+	// 4. Allocate and zero the queue memory, making sure the memory is physically contiguous.
+		// this is done after size negotiation in virtio_queue_init_vq
+	// 5. Notify the device about the queue size by writing the size to QueueNum.
+	virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_NUM, size);
+	sync();
+	// ... further initialization steps take place in virtio_queue_init_vq ...
+	return size;
+
+	// (this process does not change significantly between legacy and VIRTIO_F_VERSION_1)
 #endif
 }
 
@@ -651,6 +690,8 @@ static void virtio_set_qaddr(struct virtio_device *dev, int queue, uint64_t qadd
 		} else {
 			printf("virtio-iocap: support disabled for device %p queue %d\n", dev->mmio_base, queue);
 		}
+
+		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_READY, 1);
 	} else {
 		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_PFN, qaddr >> 12);
 		virtio_mmio_write32(dev->mmio_base, VIRTIO_MMIO_QUEUE_NUM, 1024);
@@ -680,8 +721,10 @@ struct vqs *virtio_queue_init_vq(struct virtio_device *dev, unsigned int id)
 	}
 	#endif
 
-	// TODO if use_desc_iocap make sure this is always a size such that `next` fits in 13 bits.
-	vq->size = virtio_get_qsize(dev, id);
+	// If use_desc_iocap make sure this is always a size such that `next` fits in 13 bits.
+	uint16_t max_size = vq->use_desc_iocap ? (1 << 13) : UINT16_MAX;
+	vq->size = virtio_negotiate_qsize(dev, id, max_size);
+	printf("virtio_queue_init_vq negotiated size %d for queue %d\n", vq->size, id);
 
 	// Depending on use_desc_iocap, the queue sizes will be different
 	size_t vq_desc_size;

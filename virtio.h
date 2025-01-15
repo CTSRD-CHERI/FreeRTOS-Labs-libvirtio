@@ -153,6 +153,7 @@ typedef struct {
 
 extern unsigned long virtio_vring_size(unsigned int qsize, size_t desc_size);
 extern unsigned int virtio_get_qsize(struct virtio_device *dev, int queue);
+extern unsigned int virtio_negotiate_qsize(struct virtio_device *dev, int queue, uint16_t max_size);
 extern vqs_desc virtio_get_vring_desc(struct virtio_device *dev, int queue);
 extern struct vring_avail *virtio_get_vring_avail(struct virtio_device *dev, int queue);
 extern struct vring_used *virtio_get_vring_used(struct virtio_device *dev, int queue);
