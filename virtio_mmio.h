@@ -110,7 +110,7 @@ static inline void virtio_mmio_write64(uint32_t *base, size_t offset, uint64_t v
 }
 
 #ifdef VIRTIO_USE_IOCAPS
-static inline void virtio_mmio_write128_group32(uint32_t *base, size_t offset, CCapU128 val)
+static inline void virtio_mmio_write128_group32(uint32_t *base, size_t offset, const CCapU128 val)
 {
 	virtio_mmio_write32(
 		base, offset,
@@ -142,7 +142,7 @@ static inline void virtio_mmio_write128_group32(uint32_t *base, size_t offset, C
 	);
 }
 
-static inline void virtio_mmio_write128_group64(uint32_t *base, size_t offset, CCapU128 val)
+static inline void virtio_mmio_write128_group64(uint32_t *base, size_t offset, const CCapU128 val)
 {
 	virtio_mmio_write64(
 		base, offset,
