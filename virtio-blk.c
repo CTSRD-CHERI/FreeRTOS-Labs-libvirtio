@@ -196,7 +196,7 @@ virtioblk_transfer(struct virtio_device *dev, char *buf, uint64_t blocknum,
 	mb();
 
 	/* Tell HV that the queue is ready */
-	printf("virtio_queue_notify - device %p, vq %p, old avail_idx: %d, vq->avail->idx: %d\n", dev, vq, avail_idx, vq->avail->idx);
+	printf("virtio_queue_notify - device %p, vq %p, old avail_idx: %d, vq->avail->idx: %d, *current_used_idx = %d, last_used_idx = %d\n", dev, vq, avail_idx, vq->avail->idx, *current_used_idx, last_used_idx);
 	virtio_queue_notify(dev, 0);
 
 	/* Wait for host to consume the descriptor */
@@ -208,7 +208,7 @@ virtioblk_transfer(struct virtio_device *dev, char *buf, uint64_t blocknum,
 			break;
 	}
 
-	// printf("virtioblk_transfer completed\n");
+	// printf("virtioblk_transfer completed - *current_used_idx = %d, start time = %d, end time = %d, curr time = %d\n", *current_used_idx, time - VIRTIO_TIMEOUT, time, SLOF_GetTimer());
 
 	virtio_free_desc(vq, id, dev->features);
 	virtio_free_desc(vq, id + 1, dev->features);
