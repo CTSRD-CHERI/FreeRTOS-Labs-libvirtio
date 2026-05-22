@@ -16,16 +16,21 @@ uint64_t ccap_panic_write_utf8(const uint8_t *utf8, uint64_t utf_len) {
     return utf_len;
 }
 
+static mbedtls_aes_context ccap_aes_ctx;
+static bool ccap_aes_ctx_init = false;
+
 /**
  * Define the function libccap uses to AES-encrypt data to generate signatures.
  */
 void aes_encrypt_128_func(const CCapU128 *secret, const CCapU128 *data, CCapU128 *result) {
-    mbedtls_aes_context ctx;
-    mbedtls_aes_init(&ctx);
-    if (mbedtls_aes_setkey_enc(&ctx, *secret, 128) == 0) {
-        if (mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT, *data, *result) == 0) {
+    if (!ccap_aes_ctx_init) {
+        mbedtls_aes_init(&ccap_aes_ctx);
+        ccap_aes_ctx_init = true;
+    }
+    // TODO remember secret and check?
+    if (mbedtls_aes_setkey_enc(&ccap_aes_ctx, *secret, 128) == 0) {
+        if (mbedtls_aes_crypt_ecb(&ccap_aes_ctx, MBEDTLS_AES_ENCRYPT, *data, *result) == 0) {
             // TODO signal success/failure
         }
     }
-    mbedtls_aes_free(&ctx);
 }
