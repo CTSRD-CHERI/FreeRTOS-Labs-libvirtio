@@ -727,17 +727,18 @@ struct vqs *virtio_queue_init_vq(struct virtio_device *dev, unsigned int id)
 	printf("virtio_queue_init_vq negotiated size %d for queue %d\n", vq->size, id);
 
 	// Depending on use_desc_iocap, the queue sizes will be different
-	size_t vq_desc_size;
+	size_t sizeof_vring_desc;
 	if (vq->use_desc_iocap) {
 		#if VIRTIO_USE_IOCAPS
-		vq_desc_size = virtio_vring_size(vq->size, sizeof(struct CCap2024_11));
+		sizeof_vring_desc = sizeof(struct CCap2024_11);
 		#else
 		fprintf(stderr, "vq has use_desc_iocap enabled when VIRTIO_USE_IOCAPS is 0\n");
 		return NULL;
 		#endif
 	} else {
-		vq_desc_size = virtio_vring_size(vq->size, sizeof(struct vring_desc));
+		sizeof_vring_desc = sizeof(struct vring_desc);
 	}
+	size_t vq_desc_size = virtio_vring_size(vq->size, sizeof_vring_desc);
 
 	vq->desc.desc_void = SLOF_alloc_mem_aligned(vq_desc_size, 4096);
 	if (!vq->desc.desc_void) {
@@ -745,7 +746,7 @@ struct vqs *virtio_queue_init_vq(struct virtio_device *dev, unsigned int id)
 		return NULL;
 	}
 
-	vq->avail = (void *) ((size_t) vq->desc.desc_void + vq->size * sizeof(struct vring_desc));
+	vq->avail = (void *) ((size_t) vq->desc.desc_void + vq->size * sizeof_vring_desc);
 
 #ifdef __CHERI_PURE_CAPABILITY__
 	/* Avail ring is  written by the driver */
