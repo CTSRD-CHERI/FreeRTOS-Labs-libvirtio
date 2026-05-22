@@ -433,11 +433,17 @@ void virtio_fill_desc(struct vqs *vq, int id, uint64_t features,
 		};
 		CCap2024_11* iocap = &vq->desc.desc_iocap[id];
 
-		printf("virtio-iocap: virtio_fill_desc from virtio addr: %016x len: %08x flags: %x next: %x\n", addr, len, flags, next);
+		// printf("virtio-iocap: virtio_fill_desc from virtio addr: %016x len: %08x flags: %x next: %x\n", addr, len, flags, next);
 		if (ccap2024_11_init_virtio_cavs_exact(iocap, global_dma_key, &native_desc, global_dma_key_id)) {
-			printf("Oh no! ccap2024_11_init_cavs_exact of base 0x%016lx len: 0x%016x failed :(\n", addr, len);
+			fprintf(stderr, "Oh no! ccap2024_11_init_cavs_exact of base 0x%016lx len: 0x%016x failed :(\n", addr, len);
 		} else {
-			printf("success\n");
+			// struct CCapNativeVirtqDesc test_desc;
+			// CCapResult res = ccap2024_11_read_virtio(iocap, &test_desc);
+			// if (res != 0 || test_desc.addr != native_desc.addr || test_desc.len != native_desc.len) {
+			// 	printf("Oh no! encoding mismatch: expected base 0x%016lx len: 0x%016x got base 0x%016lx len: 0x%016lx\n", addr, len, test_desc.addr, test_desc.len);
+			// }
+
+			// printf("success 0x%08lx%08lx 0x%08lx%08lx\n", ((uint64_t*)&iocap->data)[1], ((uint64_t*)&iocap->data)[0], ((uint64_t*)&iocap->signature)[1], ((uint64_t*)&iocap->signature)[0]);
 		}
 		#else
 		fprintf(stderr, "vq has use_desc_iocap enabled when VIRTIO_USE_IOCAPS is 0\n");

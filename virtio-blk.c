@@ -97,7 +97,7 @@ virtioblk_shutdown(struct virtio_device *dev)
 static void fill_blk_hdr(struct virtio_blk_req *blkhdr, bool is_modern,
                          uint32_t type, uint32_t ioprio, uint32_t sector)
 {
-	printf("sector: 0x%lx\n", sector);
+	// printf("sector: 0x%lx\n", sector);
 	if (is_modern) {
 		blkhdr->type = cpu_to_le32(type);
 		//blkhdr->ioprio = cpu_to_le32(ioprio);
@@ -196,7 +196,7 @@ virtioblk_transfer(struct virtio_device *dev, char *buf, uint64_t blocknum,
 	mb();
 
 	/* Tell HV that the queue is ready */
-	printf("virtio_queue_notify - device %p, vq %p, old avail_idx: %d, vq->avail->idx: %d, *current_used_idx = %d, last_used_idx = %d\n", dev, vq, avail_idx, vq->avail->idx, *current_used_idx, last_used_idx);
+	// printf("virtio_queue_notify - device %p, vq %p, old avail_idx: %d, vq->avail->idx: %d, *current_used_idx = %d, last_used_idx = %d\n", dev, vq, avail_idx, vq->avail->idx, *current_used_idx, last_used_idx);
 	virtio_queue_notify(dev, 0);
 
 	/* Wait for host to consume the descriptor */
@@ -219,7 +219,7 @@ virtioblk_transfer(struct virtio_device *dev, char *buf, uint64_t blocknum,
 	if (status == 0)
 		return cnt;
 
-	printf("virtioblk_transfer failed! type=%i, status = %i\n",
+	fprintf(stderr, "virtioblk_transfer failed! type=%i, status = %i\n",
 	       type, status);
 
 	return 0;
