@@ -219,7 +219,7 @@ virtioblk_transfer(struct virtio_device *dev, char *buf, uint64_t blocknum,
 	if (status == 0)
 		return cnt;
 
-	fprintf(stderr, "virtioblk_transfer failed! type=%i, status = %i\n",
+	printf("virtioblk_transfer failed! type=%i, status = %i\n",
 	       type, status);
 
 	return 0;
