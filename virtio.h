@@ -13,6 +13,7 @@
 #ifndef _LIBVIRTIO_H
 #define _LIBVIRTIO_H
 
+#include "FreeRTOSConfig.h"
 #include <stdint.h>
 
 /* Device status bits */
